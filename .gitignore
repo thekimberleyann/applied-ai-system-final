@@ -1,0 +1,10 @@
+__pycache__/
+.venv/
+.venv_new/
+.pytest_cache/
+.DS_Store
+
+# Local-only working files (never upload)
+PLAN.local.md
+ai_log.local.md
+*.local.md
