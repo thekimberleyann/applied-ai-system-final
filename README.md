@@ -202,9 +202,35 @@ python -m src.main
 
 ## Sample Recommendation Output
 
-<!-- Phase 3: paste the terminal output (titles, scores, reasons) as a fenced block. -->
+Running `python -m src.main` against the default profile (genre pop, mood happy,
+target energy 0.8) produces this ranking. Note how the two pop/happy songs tie on
+genre and mood, so the energy-closeness term alone decides that Summer Anthem
+(energy 0.80, right on the target) edges out Sunshine Pop (energy 0.85):
 
-_TODO (Phase 3)._
+```
+Loaded songs: 20
+
+=== Recommendations for the default profile (pop / happy) ===
+1. Summer Anthem  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Sunshine Pop  (score 3.95)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+3. Midnight Drive  (score 0.95)
+     - energy close to target (+0.95)
+4. Crown Season  (score 0.95)
+     - energy close to target (+0.95)
+5. Power Up  (score 0.92)
+     - energy close to target (+0.92)
+```
+
+Songs 3 to 5 match neither genre nor mood, so their whole score is the energy
+term. This is the genre-dominance effect described under Expected Biases: any
+pop/happy match jumps far ahead of songs that only happen to sit near the target
+energy.
 
 ## Testing
 
@@ -212,4 +238,22 @@ _TODO (Phase 3)._
 python -m pytest
 ```
 
-_TODO (Phase 3/quality): describe what the tests cover._
+The test suite (in `tests/test_recommender.py`) is a quality add -- the
+assignment does not require tests, but they act as a reproducibility and
+regression guard and double as an executable specification of the recipe. The
+29 tests cover:
+
+- **Loading:** the real catalog loads exactly 20 rows with the right types;
+  genre and mood are lower-cased; and malformed rows (a non-numeric cell, a short
+  row, a blank line) are skipped rather than crashing the load.
+- **Scoring:** a perfect match scores 4.00; matching is case-insensitive; the
+  energy term is symmetric around the target; a genre match (+2.0) outranks a
+  mood-only match (+1.0); missing fields and unknown genres degrade gracefully
+  instead of raising.
+- **The explainability guarantee:** the numeric values in the reasons list always
+  sum to the total score, checked across many song and profile combinations
+  (including an off-round energy value).
+- **Ranking:** `recommend_songs` returns at most k, in non-increasing score
+  order, handles an empty catalog and an empty-genre profile, and is
+  deterministic -- exact score ties keep the catalog's original order, and the
+  caller's catalog is never reordered.
