@@ -6,11 +6,50 @@ explained list of suggestions.
 
 ## How The System Works
 
-<!-- Phase 1 & 2: explain real-world recommenders (collaborative vs content-based
-filtering) and what THIS version prioritizes; list the Song and UserProfile features;
-document the finalized Algorithm Recipe and expected biases. -->
+### What a recommender does
 
-_TODO (Phase 1/2)._
+A recommender system suggests items a person is likely to enjoy. Streaming
+services like Spotify and Netflix do this constantly: out of a huge library,
+they surface the handful of songs or shows most relevant to you. VibeFinder is
+a small, transparent version of the same idea, built for a fixed catalog of
+songs.
+
+### Two common approaches
+
+Real-world recommenders are usually built one of two ways.
+
+- **Collaborative filtering** learns from the behavior of many users. It looks
+  at what large numbers of people liked, skipped, replayed, or added to
+  playlists, and finds patterns across those users. The core idea is "people
+  who behaved like you also enjoyed this." For example, Spotify's Discover
+  Weekly can recommend a track simply because listeners with taste similar to
+  yours keep saving it, even without knowing anything about how the song
+  sounds. This approach needs a large history of user interactions to work.
+- **Content-based filtering** matches the features of the items themselves to a
+  user's stated preferences. It does not need other users at all. The core idea
+  is "this item's attributes line up with what you said you want." For example,
+  you tell a service you like calm acoustic music, and it scores each song by
+  how well its genre, mood, and energy fit that description. This approach needs
+  good item features and a clear preference to compare against.
+
+### Which approach VibeFinder uses, and why
+
+VibeFinder uses **content-based filtering**.
+
+This is a deliberate choice forced by the data we have. VibeFinder has no record
+of how anyone has ever listened -- there are no likes, skips, play counts,
+ratings, or playlists to learn from. Collaborative filtering is therefore not
+possible here, because there is no crowd of user behavior to find patterns in.
+What VibeFinder does have is a catalog where every song is described by concrete
+features, plus a single user's stated taste profile. It compares the two
+directly: for each song it measures how well the song's features match the
+profile, produces a score, ranks the songs by that score, and returns a short
+list of the best matches with a plain-language reason for each.
+
+<!-- Phase 2: add the finalized Algorithm Recipe (how the score is calculated)
+and the expected-biases paragraph here. -->
+
+_Algorithm Recipe and expected biases: TODO (Phase 2)._
 
 ## Run it
 
