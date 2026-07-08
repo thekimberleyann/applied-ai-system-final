@@ -171,8 +171,3 @@ Addison-Wesley.
 Wiegers, K. E., & Beatty, J. (2013). *Software requirements* (3rd ed.).
 Microsoft Press.
 
-<!-- Kim: verify the Cohn entry against your syllabus. The book is authored by
-Mike Cohn; Kent Beck is the Addison-Wesley Signature Series editor and wrote the
-foreword, not a co-author. If your course lists "Cohn, M., & Beck, K.," change it
-to match. APA 7th: book titles in sentence case and italics, publisher only. -->
-
