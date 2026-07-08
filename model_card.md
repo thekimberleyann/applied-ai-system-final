@@ -137,17 +137,93 @@ today.
 
 ## Observed Behavior / Biases
 
-_At least one pattern, limitation, or imbalance (Phase 4 findings)._
+<!-- Kim: this is the neutral factual write-up of the Phase 4 findings. Reword in
+your own voice; the "what surprised me" reaction belongs in the Personal Reflection. -->
+
+Running the recipe across many taste profiles surfaced three consistent patterns:
+
+- **Genre dominance / a categorical moat.** Because a genre match is +2.0 and a
+  mood match is +1.0, any song that matches both starts at 3.0 before the energy
+  term is counted. That is a roughly two-point lead over any song matching only
+  one field, so a genuine genre-plus-mood match almost always takes the top
+  spot. It is robust at the top, but it also means the whole ranking is decided
+  by genre first, everything else second.
+- **Energy is only a weak tiebreaker.** The energy term (0.0 to 1.0) matters when
+  two songs already tie on genre and mood, but it is easily swamped by a single
+  categorical match. In the Conflicted profile below, a song with a large energy
+  mismatch still wins comfortably because it is the only genre-plus-mood match.
+- **A pop / high-energy catalog skew.** The catalog leans toward pop and
+  high-energy songs, so mainstream, upbeat profiles get several strong matches
+  while niche profiles (for example a single-song mood like dreamy or sad) fall
+  back to weak energy-only matches.
 
 ## Limitations and Bias
 
-_3-5 sentences on one weakness discovered during experiments (Phase 4 Step 4)._
+<!-- Kim: the assignment asks for 3-5 sentences on ONE weakness found during the
+experiments. This is a neutral draft of the popularity finding; put it in your voice. -->
+
+The clearest weakness is how fragile the ranking becomes below the top match, and
+how easily a popularity signal would corrupt it. The popularity experiment
+(`python -m src.experiment_popularity`) added a popularity term on top of the pure
+recipe for a folk / nostalgic listener. The deserved number one, Wandering Roads,
+survived because a genre-plus-mood match is structurally hard to unseat, but the
+ranks below it did not: at a modest weight the more popular of two genuine mood
+matches jumped ahead of the less popular one, and at a higher weight two pop chart
+hits that share neither genre nor mood with a folk fan pushed real near-matches
+out of the top five. This is the classic popularity-bias / filter-bubble failure,
+where a crowd signal quietly overrides personal fit, and it is exactly why the
+shipped recipe scores taste only and leaves popularity out.
 
 ## Evaluation
 
-<!-- Phase 4 Step 5: which profiles you tested, what surprised you, and a per-pair
-comparison of outputs (what changed and why it makes sense). Paste terminal output
-for each profile as fenced code blocks. -->
+<!-- Kim: the profiles tested and the factual comparisons are below with real
+terminal output. The one thing left for you is the "what surprised me" line in
+each comparison and in the Personal Reflection. -->
+
+Seven profiles were tested beyond the default: four diverse (High-Energy Pop,
+Chill Lofi, Deep Intense Rock, Romantic R&B) and three adversarial (Conflicted,
+Ghost Genre, Energy Ceiling), plus the popularity experiment. Full output comes
+from `python -m src.main` and `python -m src.experiment_popularity`. Three
+comparisons tell the story.
+
+**Comparison 1 -- the energy tiebreak flips a winner (default vs Energy Ceiling).**
+For a pop / happy listener, changing only the target energy changes the number
+one song. At target 0.80 Summer Anthem (energy 0.80) wins; at target 1.0 (a
+ceiling no song reaches) Sunshine Pop (energy 0.85, closer to 1.0) wins. A tiny
+number decides the order.
+
+```
+Default (pop / happy / 0.80)          Energy Ceiling (pop / happy / 1.0)
+1. Summer Anthem   (score 4.00)        1. Sunshine Pop   (score 3.85)
+2. Sunshine Pop    (score 3.95)        2. Summer Anthem  (score 3.80)
+```
+
+**Comparison 2 -- graceful degradation (Ghost Genre vs a normal pop run).** When
+the requested genre (kpop) is not in the catalog, the +2.0 genre term is dead for
+every song, so the best possible score drops from 4.0 to 2.0 and the system ranks
+on mood and energy alone. It does not crash; it just quietly loses a scoring term.
+
+```
+Ghost Genre (kpop / happy / 0.80)      High-Energy Pop (pop / happy / 0.95)
+1. Summer Anthem   (score 2.00)        1. Sunshine Pop   (score 3.90)
+2. Sunshine Pop    (score 1.95)        2. Summer Anthem  (score 3.85)
+```
+
+**Comparison 3 -- the popularity experiment (before vs after, folk / nostalgic /
+0.40).** With popularity switched on, the low-popularity hidden gem stays at
+number one, but popular non-matches invade the ranks below it.
+
+```
+POP_WEIGHT = 2.0
+#  BEFORE (pure taste)                 AFTER (+ popularity)
+1  Wandering Roads (4.00, pop 0.18)    Wandering Roads (4.36)
+2  Backroad Sunset (1.85, pop 0.58)    Golden Hour     (3.39)
+3  Golden Hour     (1.75, pop 0.82)    Backroad Sunset (3.01)
+4  Rainy Day Blues (1.00, pop 0.25)    Summer Anthem   (2.50)   <- pop hit, no genre/mood match
+5  Acoustic Morning(0.95, pop 0.40)    Sunshine Pop    (2.35)   <- pop hit, no genre/mood match
+```
+
+_What surprised me (Kim to write): ____._
 
 ## Intended Use and Non-Intended Use
 
