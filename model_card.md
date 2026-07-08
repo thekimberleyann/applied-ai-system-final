@@ -9,14 +9,57 @@ _e.g., "VibeFinder 1.0"_
 
 ## Goal / Task
 
-VibeFinder recommends songs from a fixed catalog that fit a single user's stated
-taste profile. For each song it compares the song's genre, mood, and energy
-against the user's favorite genre, favorite mood, and target energy, produces a
-match score, and returns a ranked top-k list with a short reason for each pick.
-The goal is a transparent, explainable recommendation rather than a black-box
-prediction. It does not predict hits or learn from other users.
+### Who uses it, and why
 
-<!-- Kim: this is the neutral factual stub. Reword in your own voice if you like. -->
+VibeFinder is for a listener who can describe the vibe they want right now -- a
+genre, a mood, and an energy level -- and wants a few songs from the catalog that
+fit that vibe, each with a plain reason so they can trust the pick. The primary
+user goal is mood and taste matching ("give me songs that fit this vibe"), not
+discovery of unfamiliar music. VibeFinder does not track what the user has
+already heard and does not reward novelty, so it optimizes for fit, not for
+surfacing new artists. If discovery were the goal, the scoring would need a
+novelty term that lowers the rank of already-heard songs, which is out of scope
+here.
+
+### What it does (main success path)
+
+Given one taste profile (favorite_genre, favorite_mood, target_energy),
+VibeFinder scores every song in the catalog, ranks them, and returns the top-k
+(default 5) highest-scoring songs, each with a short reason.
+
+### What "transparent" and "explainable" mean here (concrete and testable)
+
+These are quality goals, so we pin them to specific, checkable behavior rather
+than leaving them subjective:
+
+- **Transparent:** every recommendation shows its numeric match score on a fixed
+  0.0 to 4.0 scale, so the user can see how strong a match is and how picks
+  compare to each other.
+- **Explainable:** every recommendation lists the reasons that produced the
+  score, one line per contributing term, for example "genre match (+2.0)",
+  "mood match (+1.0)", "energy close to target (+0.94)". A reason appears only
+  when that term actually fired. Acceptance check (verified by a Phase 3 test):
+  the component values in the reasons list add up to the displayed total score.
+
+### Constraints and non-goals (what VibeFinder will NOT do)
+
+Documented up front to keep scope tight and avoid gold plating:
+
+- Does not predict popularity or "hits."
+- Does not learn from other users or from listening history (no collaborative
+  filtering).
+- Uses one static profile per run, defined in code. There is no live slider,
+  per-request UI, login, or user account.
+- Reads a fixed, hand-authored CSV catalog. There is no admin tool or
+  data-ingestion pipeline for adding songs at runtime; the catalog is edited
+  directly in `data/songs.csv`.
+- Always returns a top-k list even when the best matches are weak. There is no
+  minimum-score threshold that would instead report "nothing fits your vibe."
+  (Edge cases such as an unknown genre or an energy target no song can reach are
+  examined in the Phase 4 evaluation.)
+
+<!-- Kim: this is the neutral factual stub, now reframed around user goals,
+concrete explainability, and explicit constraints. Reword in your own voice. -->
 
 ## Data Used
 
