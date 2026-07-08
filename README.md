@@ -151,9 +151,47 @@ summing guarantee is enforced by a Phase 3 test.)
 > on purpose so Phase 4 can switch it on inside a controlled experiment, measure
 > that bias directly, and then revert it. See the Phase 4 bias study.
 
-<!-- Phase 2 (next commit): add the expected-biases paragraph here. -->
+### Expected Biases
 
-_Expected biases: TODO (Phase 2)._
+Bias can enter from two places: the scoring rule itself, and the songs we chose
+to score. The four biases below are predictions we make from the design and the
+catalog, stated up front. Each is a hypothesis that Phase 4 tests directly, where
+the measured results and any surprises are reported.
+
+**Biases from the scoring recipe (the math)**
+
+- **Genre dominance.** Genre is worth +2.0, double the weight of mood (+1.0) or a
+  perfect energy match (+1.0). A song that matches your genre usually outranks a
+  song that misses genre but matches mood and energy. In the closest case a genre
+  match scores at least 2.0, while the best a non-genre song can reach (perfect
+  mood +1.0 plus perfect energy +1.0) is also 2.0, so the genre song ties at
+  worst and wins whenever its energy is even slightly close to your target. We
+  expect genre to dominate the rankings; Phase 4 will measure how often the top
+  result simply shares the profile's genre.
+- **Popularity bias (held out by design).** Popularity is a column in the catalog
+  but is deliberately excluded from the shipped recipe (the three terms are genre,
+  mood, and energy only, maxing at 4.0). We designed it out on purpose, and we
+  gave several niche perfect-match songs a low popularity, so a popularity term
+  would bury exactly the songs a content-based recommender should surface (a
+  filter-bubble, rich-get-richer effect). Phase 4 switches popularity on inside a
+  controlled experiment to demonstrate this bias, measures how far the niche
+  matches drop, then reverts it so the final product stays popularity-free.
+
+**Biases from the catalog (the data)**
+
+- **Composition skew.** The 20 songs are not evenly balanced -- they skew toward
+  pop and high-energy tracks, and one cluster of electronic-family genres
+  (synthwave, edm, electronic, dreampop) makes up about 20% of the catalog. We
+  expect popular, high-energy profiles to get richer and more varied results than
+  niche profiles simply because there are more songs to match. Phase 4 will
+  compare result quality across different profile types. (Note this is a property
+  of the data, not the recipe: the energy term still rewards closeness to your
+  target, not high energy.)
+- **Thin-mood coverage.** Four moods appear on only one song each: dreamy,
+  intense, mellow, and sad. For a profile asking for one of those moods there is
+  almost nothing to match on, so the mood term can fire at most once and the
+  ranking falls back to genre and energy. Phase 4 will check which mood profiles
+  collapse to genre-plus-energy in practice.
 
 ## Run it
 
