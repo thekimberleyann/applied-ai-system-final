@@ -1,11 +1,21 @@
-title,artist,genre,mood,energy,tempo_bpm
-Sunshine Pop,The Brights,pop,happy,0.85,124
-Midnight Drive,Neon Roads,synthwave,energetic,0.75,118
-Lofi Rain,Study Cat,lofi,chill,0.30,72
-Heavy Riff,Iron Pulse,rock,intense,0.95,140
-Acoustic Morning,Jane Willow,acoustic,calm,0.35,90
-Dance All Night,DJ Vortex,edm,energetic,0.90,128
-Blue Notes,Miles Ahead,jazz,mellow,0.45,100
-Summer Anthem,Coast Kids,pop,happy,0.80,120
-Rainy Day Blues,Sad Sax,blues,sad,0.40,85
-Power Up,Arcade Heroes,electronic,energetic,0.88,130
+title,artist,genre,mood,energy,tempo_bpm,popularity
+Sunshine Pop,The Brights,pop,happy,0.85,124,0.90
+Midnight Drive,Neon Roads,synthwave,energetic,0.75,118,0.55
+Lofi Rain,Study Cat,lofi,chill,0.30,72,0.50
+Heavy Riff,Iron Pulse,rock,intense,0.95,140,0.65
+Acoustic Morning,Jane Willow,acoustic,calm,0.35,90,0.40
+Dance All Night,DJ Vortex,edm,energetic,0.90,128,0.85
+Blue Notes,Miles Ahead,jazz,mellow,0.45,100,0.30
+Summer Anthem,Coast Kids,pop,happy,0.80,120,0.95
+Rainy Day Blues,Sad Sax,blues,sad,0.40,85,0.25
+Power Up,Arcade Heroes,electronic,energetic,0.88,130,0.70
+Golden Hour,Vega Verse,hip-hop,nostalgic,0.65,95,0.82
+Crown Season,Vega Verse,hip-hop,aggressive,0.85,102,0.88
+Backroad Sunset,Dusty Wheels,country,nostalgic,0.55,98,0.58
+Moonlight Redux,A. Keys Trio,classical,calm,0.25,60,0.35
+Velvet Touch,Silk Avenue,r&b,romantic,0.50,92,0.62
+Iron Fury,Bladewright,metal,aggressive,0.98,150,0.28
+Island Time,Palm Groove,reggae,chill,0.55,76,0.44
+Wandering Roads,Hazel Pine,folk,nostalgic,0.40,88,0.18
+Soul Fire,Ruby Grand,soul,romantic,0.60,100,0.52
+Cloudscape,Slow Halo,dreampop,dreamy,0.45,105,0.30
