@@ -69,24 +69,36 @@ concrete explainability, and explicit constraints. Reword in your own voice. -->
 
 ## Data Used
 
-The catalog is a small synthetic dataset of 10 songs stored in `data/songs.csv`.
-Each song has six features: title, artist, genre, mood, energy (a 0.0 to 1.0
-float), and tempo_bpm (an integer). Recommendations are made against a user
-profile with three fields: favorite_genre, favorite_mood, and target_energy.
+The catalog is a small synthetic dataset of 20 songs stored in `data/songs.csv`.
+Each song has seven features: title, artist, genre, mood, energy (a 0.0 to 1.0
+float), tempo_bpm (an integer), and popularity (a 0.0 to 1.0 float). Popularity
+is data-only: it is recorded for every song but is excluded from the scoring
+recipe by design, and is used only in the Phase 4 bias experiment (see the
+Algorithm Summary). Recommendations are made against a user profile with three
+fields: favorite_genre, favorite_mood, and target_energy.
+
+Catalog make-up (the baseline for the Phase 4 bias study):
+
+- The 20 songs skew toward pop and high-energy tracks, and one cluster of
+  electronic-family genres (synthwave, edm, electronic, dreampop) makes up about
+  20% of the catalog.
+- Several moods are thinly covered: dreamy, intense, mellow, and sad each appear
+  on only one song.
+- Some niche, perfect-match songs were deliberately given a low popularity value,
+  so the Phase 4 popularity-bias experiment has something vivid to surface.
 
 Known limits of this data:
 
-- The catalog is tiny (10 songs) and hand-authored, not drawn from real
+- The catalog is tiny (20 songs) and hand-authored, not drawn from real
   listening data, so results will not generalize.
-- There is no popularity, play-count, rating, or user-history data, so
-  collaborative filtering is not possible.
+- There is no play-count, rating, or user-history data, so collaborative
+  filtering is not possible. The popularity value is a single static number per
+  song, not a record of interactions, so it does not enable collaborative
+  filtering either.
 - There is no temporal data (no release dates or timestamps), so the system
   cannot account for recency or trends.
 - Genre, mood, and energy values are assigned by hand and may carry the
   author's own labeling bias.
-
-<!-- Phase 2 will expand the catalog to ~20 songs; update the size and
-distribution notes here when that happens. -->
 
 
 ## Algorithm Summary
