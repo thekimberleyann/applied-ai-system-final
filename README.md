@@ -1,4 +1,4 @@
-# VibeFinder — Music Recommender Simulation
+# VibeFinder - Music Recommender Simulation
 
 A simple content-based music recommender. It scores each song in a catalog against
 a user's "taste profile" (favorite genre, mood, target energy) and returns a ranked,
@@ -238,10 +238,11 @@ energy.
 python -m pytest
 ```
 
-The test suite (in `tests/test_recommender.py`) is a quality add -- the
-assignment does not require tests, but they act as a reproducibility and
-regression guard and double as an executable specification of the recipe. The
-29 tests cover:
+The test suite is a quality add -- the assignment does not require tests, but they
+act as a reproducibility and regression guard and double as an executable
+specification of the recipe. There are 35 tests across two files. `tests/`
+`test_recommender.py` covers the core recipe and `tests/test_evaluation.py` covers
+the Phase 4 evaluation profiles and the popularity experiment. Together they cover:
 
 - **Loading:** the real catalog loads exactly 20 rows with the right types;
   genre and mood are lower-cased; and malformed rows (a non-numeric cell, a short
@@ -257,3 +258,8 @@ regression guard and double as an executable specification of the recipe. The
   order, handles an empty catalog and an empty-genre profile, and is
   deterministic -- exact score ties keep the catalog's original order, and the
   caller's catalog is never reordered.
+- **Evaluation and experiment:** the energy-ceiling winner flip, the ghost-genre
+  term going dead, the conflicted profile still ranking the unique categorical
+  match first, and three popularity-experiment guards (the #1 is never dethroned,
+  niche near-matches are buried while pop hits are lifted, and the pure recipe is
+  never touched or the catalog mutated).
