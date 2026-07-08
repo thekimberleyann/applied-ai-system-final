@@ -5,7 +5,9 @@ tested profiles, experiment results, and observed biases. Keep sentences short a
 
 ## Model Name
 
-_e.g., "VibeFinder 1.0"_
+VibeFinder 1.0 -- a content-based music recommender that scores a small fixed
+catalog against a described genre, mood, and energy profile and returns the top
+matches with plain-language reasons.
 
 ## Goal / Task
 
@@ -227,11 +229,60 @@ _What surprised me (Kim to write): ____._
 
 ## Intended Use and Non-Intended Use
 
-_What it is for, and what it should NOT be used for._
+<!-- Kim: neutral factual draft; reword in your voice. Kept consistent with the
+non-goals already listed under Goal / Task. -->
+
+**Intended use.** VibeFinder is a teaching and demonstration tool for
+content-based recommendation. It takes one listener's described taste -- a genre,
+a mood, and a target energy level -- and returns a short, ranked list of songs
+from a small, fixed, hand-authored catalog, with a plain-language reason for
+every match, so a person can see exactly why each song was picked. Good fits
+include learning how content-based scoring works, showing how a transparent
+scoring recipe behaves, and giving a concrete, inspectable example of how
+recommendation biases arise.
+
+**Non-intended use.** VibeFinder is not built for and should not be used for:
+
+- Real-world or production music recommendation. The catalog is 20 hand-authored
+  songs, not a live library, and the profile is set once in code with no login,
+  interface, or feedback loop -- consistent with the constraints under Goal / Task.
+- Anything needing collaborative filtering or listening history. VibeFinder never
+  looks at what other users liked or at a listener's past plays; with no such data
+  collaborative filtering is not possible here.
+- Music discovery of unheard tracks. It optimizes for fit, not novelty, and does
+  not reward or surface unfamiliar songs.
+- Predicting hits, popularity, or commercial success. The catalog records a
+  popularity value, but the shipped recipe never scores it; it is data only.
+- Fairness-sensitive, high-stakes, or otherwise consequential decisions.
+- Any claim that a VibeFinder score is an objective measure of a song's quality. A
+  score reflects only how closely a song's tagged attributes match the described
+  profile under one fixed recipe, not whether the song is good. Note also that it
+  always returns a top-k list even when every match is weak (there is no
+  minimum-score threshold).
 
 ## Ideas for Improvement
 
-_2-3 things you would change if you kept developing this._
+<!-- Kim: neutral factual draft; reword in your voice. Each idea traces to a bias
+documented in Observed Behavior/Biases, Limitations, or the Expected Biases. -->
+
+1. **Add a diversity or anti-popularity guard to soften genre dominance.** Because
+   an exact genre-plus-mood match reaches 3.0 before energy is counted, one genre
+   can hold the top ranks almost unbeatably, and the popularity experiment showed
+   popular non-matches colonizing ranks 2 through 5. A re-balanced genre weight or
+   a rule limiting how many same-genre (or high-popularity) songs fill the list
+   would directly counter both the categorical-moat bias and the filter-bubble
+   risk. (This would be added on top of the recipe; the base recipe stays three
+   terms and popularity stays out of scoring.)
+2. **Expand the catalog for the thin moods.** Four moods -- dreamy, intense,
+   mellow, and sad -- have a single song each, so those profiles get little real
+   choice and the mood term barely differentiates results. Adding songs across
+   these underrepresented moods would give niche profiles genuine matches and
+   reduce the pop and high-energy skew of the current catalog.
+3. **Add a lightweight feedback loop.** The model runs one static profile with no
+   way for a listener to react, documented as an honest non-goal and an
+   expectation gap. A simple rate-or-skip signal, or a target-energy slider to
+   adjust the profile between runs, would let results respond to the listener
+   instead of being fixed in code.
 
 ## Personal Reflection
 
