@@ -91,7 +91,38 @@ distribution notes here when that happens. -->
 
 ## Algorithm Summary
 
-_Your scoring rules in plain language (no code)._
+VibeFinder is a content-based recommender: it scores every song against your
+stated tastes -- favorite genre, favorite mood, and a target energy level -- and
+returns the songs that fit best. This section describes the scoring design; the
+implementation is built in Phase 3.
+
+A song earns up to four points in total, from three rules:
+
+- **Genre match (2 points, all or nothing).** A song earns two points when its
+  genre is exactly your favorite genre, and nothing otherwise. Genre is treated
+  as the strongest signal of fit, so it is weighted twice as heavily as the other
+  two rules.
+- **Mood match (1 point, all or nothing).** A song earns one point when its mood
+  is exactly your favorite mood, and nothing otherwise.
+- **Energy closeness (up to 1 point, graduated).** This rule rewards how close a
+  song's energy is to the level you asked for, not how high its energy is. A song
+  sitting right on your target earns the full point, and the reward shrinks as the
+  gap grows in either direction -- a song calmer than you asked for is penalized
+  just as much as one that is more energetic by the same amount -- reaching zero
+  once the gap is large.
+
+Adding the three rules gives a maximum total of 4.0 (2.0 + 1.0 + 1.0). VibeFinder
+ranks every song by this total, highest first, and returns the top few (five by
+default). When two songs tie on the total score, the one appearing earlier in the
+catalog is listed first. Each recommendation comes with a short list of reasons
+showing where its points came from, and those reason values always add up to the
+total score, which is what makes the score transparent and explainable as defined
+under Goal / Task.
+
+These three rules are the entire recipe. The catalog also records each song's
+popularity, but popularity is excluded by design from scoring; it is kept only
+for a separate Phase 4 experiment and has no effect on the recommendations shown
+today.
 
 ## Observed Behavior / Biases
 
