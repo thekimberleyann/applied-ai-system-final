@@ -46,6 +46,27 @@ directly: for each song it measures how well the song's features match the
 profile, produces a score, ranks the songs by that score, and returns a short
 list of the best matches with a plain-language reason for each.
 
+### Song features (what VibeFinder knows about each song)
+
+Each song in the catalog is described by these features:
+
+- **title** -- the song's name.
+- **artist** -- the performer.
+- **genre** -- the musical category (for example pop, rock, lofi, jazz).
+- **mood** -- the emotional feel (for example happy, chill, intense, calm).
+- **energy** -- how energetic the track is, on a 0.0 to 1.0 scale, where higher
+  means more energetic.
+- **tempo_bpm** -- the tempo in beats per minute (a whole number).
+
+### UserProfile features (what VibeFinder knows about you)
+
+A user's taste profile has three preferences, which songs are matched against:
+
+- **favorite_genre** -- the genre the listener most wants to hear.
+- **favorite_mood** -- the mood the listener is in the mood for.
+- **target_energy** -- the listener's preferred energy level, on the same 0.0
+  to 1.0 scale as a song's energy.
+
 <!-- Phase 2: add the finalized Algorithm Recipe (how the score is calculated)
 and the expected-biases paragraph here. -->
 
