@@ -21,7 +21,7 @@ surfacing new artists. If discovery were the goal, the scoring would need a
 novelty term that lowers the rank of already-heard songs, which is out of scope
 here. Framing the goal around why the user asks for a recommendation, rather than
 around the software's mechanics, follows the user-story emphasis on user
-intent over feature lists (Cohn, 2004).
+intent over feature lists.
 
 ### What it does (main success path)
 
@@ -33,8 +33,7 @@ VibeFinder scores every song in the catalog, ranks them, and returns the top-k
 
 These are quality attributes (nonfunctional requirements). Like the word
 "user-friendly," they are too subjective to build against until they have
-measurable acceptance criteria, so we pin them to specific, checkable behavior
-(Wiegers & Beatty, 2013):
+measurable acceptance criteria, so we pin them to specific, checkable behavior:
 
 - **Transparent:** every recommendation shows its numeric match score on a fixed
   0.0 to 4.0 scale, so the user can see how strong a match is and how picks
@@ -49,7 +48,7 @@ measurable acceptance criteria, so we pin them to specific, checkable behavior
 
 Documenting what the system will not do keeps scope tight and helps prevent
 gold plating, where developers add unrequested features they assume the user
-wants (Wiegers & Beatty, 2013):
+wants:
 
 - Does not predict popularity or "hits."
 - Does not learn from other users or from listening history (no collaborative
@@ -162,12 +161,4 @@ _2-3 things you would change if you kept developing this._
 
 <!-- Kim writes this: biggest learning moment; how AI helped and when you double-checked
 it; what surprised you about simple algorithms; what you'd try next. -->
-
-## References
-
-Cohn, M. (2004). *User stories applied: For agile software development*.
-Addison-Wesley.
-
-Wiegers, K. E., & Beatty, J. (2013). *Software requirements* (3rd ed.).
-Microsoft Press.
 
