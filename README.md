@@ -97,10 +97,63 @@ A user's taste profile has three preferences, which songs are matched against:
 - **target_energy** -- the listener's preferred energy level, on the same 0.0
   to 1.0 scale as a song's energy.
 
-<!-- Phase 2: add the finalized Algorithm Recipe (how the score is calculated)
-and the expected-biases paragraph here. -->
+### Algorithm Recipe (how the score is calculated)
 
-_Algorithm Recipe and expected biases: TODO (Phase 2)._
+VibeFinder scores every song against your taste profile (favorite genre,
+favorite mood, and a target energy from 0.0 to 1.0), then ranks the highest
+scorers. A song's score is the sum of exactly three terms, for a maximum of
+**4.0 points** (2.0 + 1.0 + 1.0):
+
+- **Genre match (+2.0).** The song's genre must exactly equal your
+  `favorite_genre`. It is all-or-nothing: +2.0 on an exact match, otherwise 0.
+  Genre is weighted twice as heavily as the other terms because it is the
+  strongest single signal of whether a song fits the vibe you asked for.
+- **Mood match (+1.0).** The song's mood must exactly equal your
+  `favorite_mood`. Also all-or-nothing: +1.0 on an exact match, otherwise 0.
+- **Energy closeness (up to +1.0).** This term rewards how CLOSE a song's energy
+  is to your target energy, not how high its energy is. It is computed as
+  `1.0 * max(0, 1 - |song_energy - target_energy|)`. A song sitting right on
+  your target earns the full +1.0; the score shrinks as the gap widens and
+  reaches 0 once the difference is 1.0 or more. The direction does not matter --
+  a low target-energy rewards calm songs exactly as much as a high target-energy
+  rewards intense ones. Because energy is continuous, this term almost always
+  contributes something, so it acts as the natural tie-breaker between songs
+  that match on genre and mood.
+
+**Worked example.** Using the default profile (genre `pop`, mood `happy`,
+target energy `0.8`), two songs both match perfectly on genre and mood, so
+energy closeness alone decides the order:
+
+```
+Summer Anthem  genre +2.00 | mood +1.00 | energy +1.00  (|0.80 - 0.80| = 0.00) = 4.00
+Sunshine Pop   genre +2.00 | mood +1.00 | energy +0.95  (|0.85 - 0.80| = 0.05) = 3.95
+```
+
+"Summer Anthem" wins by 0.05 purely because its energy lands exactly on the
+target. A tiny number decides the ranking. When two songs tie on the total
+score, VibeFinder keeps the catalog's original order (a stable sort), so the
+ranking is deterministic.
+
+**How a recommendation is explained.** Each result carries a short reasons list
+naming only the terms that fired, for example `genre match (+2.0)`,
+`mood match (+1.0)`, `energy close to target (+0.94)`. The energy reason always
+appears; the genre and mood reasons appear only on an exact match. By design the
+component values in the reasons list always add up to the displayed total score,
+so every recommendation's explanation adds up to the number you see. (This
+summing guarantee is enforced by a Phase 3 test.)
+
+> **Note -- popularity is deliberately NOT scored.** The catalog carries a
+> `popularity` value (0.0 to 1.0) per song, but it is excluded from the shipped
+> recipe above by design. VibeFinder's job is to match one listener's taste and
+> mood, and popularity is a crowd signal that says nothing about whether a song
+> fits THIS user; scoring on it would bury niche, perfect-fit songs under chart
+> hits (a filter-bubble, rich-get-richer effect). The column is kept in the data
+> on purpose so Phase 4 can switch it on inside a controlled experiment, measure
+> that bias directly, and then revert it. See the Phase 4 bias study.
+
+<!-- Phase 2 (next commit): add the expected-biases paragraph here. -->
+
+_Expected biases: TODO (Phase 2)._
 
 ## Run it
 
