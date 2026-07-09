@@ -127,3 +127,49 @@ serving the project's goal, and directed their removal from both files. I confir
 afterward that no citation text remained.
 
 **Decision:** Rejected; removed at my direction.
+
+---
+
+## 7. An independent adversarial review of the finished project
+
+**What I asked:** After the project was built, I brought in a fresh AI reviewer
+and told it explicitly not to trust any of the earlier work, to verify everything
+by running it rather than reading it, and to try to break the code. I wanted a
+second opinion, not a rubber stamp.
+
+**What the AI produced:** Three real defects and two inaccurate claims in my own
+documentation.
+
+1. A crash in `load_songs`. `csv.DictReader` fills a short row's missing trailing
+   fields with `None`, so a row truncated before the genre or mood column made the
+   code call `None.strip()` and raise `AttributeError` -- a type the row-skipping
+   guard did not catch. One bad line killed the whole catalog load. What made this
+   worth finding is why it survived: the test named `test_load_songs_skips_malformed_rows`
+   used a fixture row with 5 of the 7 columns, so only the numeric columns were
+   missing, and `float(None)` raises `TypeError`, which WAS caught. The test passed
+   while the bug it was named for was live.
+2. My popularity experiment's written conclusion contradicted the experiment's own
+   printed output. I had written that popular non-matches invade the top five only
+   at the aggressive weight 2.0. The program printed, four lines above that
+   conclusion, that Summer Anthem and Velvet Touch already climb in at the mild
+   weight 1.0.
+3. My "roughly two-point categorical moat" did not follow from the recipe. A
+   mood-only rival with a perfect energy fit reaches 2.0 and a genre-only rival
+   reaches 3.0, which merely ties a genre-plus-mood match with a poor energy fit.
+
+**My verification and decision:** I had each finding reproduced in front of me
+before accepting it. The crash was demonstrated on a two-column CSV row; the
+contradiction was demonstrated against the program's real terminal output; and the
+moat claim was not simply deleted but stress-tested. The reviewer swept all 209
+profiles in the catalog that have an exact genre-plus-mood match, at 21 energy
+targets each, and computed the cheapest popularity weight at which a non-matching
+song can unseat the pure number one. The answer, 2.73, sits comfortably above the
+aggressive demonstration weight of 2.0, so the moat finding survives everywhere in
+this catalog and was not cherry-picked. Only the justification was wrong, not the
+headline. Each fix was committed separately after I confirmed the tests passed and
+that the experiment's printed tables were byte-for-byte unchanged, so every number
+quoted in the model card remains accurate. The suite went from 35 to 40 tests.
+
+**Decision:** Kept all findings and all fixes. The most valuable one was not a
+line of code. It was learning that a passing test can be worse than no test when
+it is named after a case it does not actually exercise.
