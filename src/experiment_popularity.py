@@ -13,12 +13,16 @@ and nothing about the shipped recommender changes.
 
 Run with:  python -m src.experiment_popularity
 
-The honest headline (verified arithmetic, see the conclusion): a genre+mood exact
-match is worth 3.0 points before energy is even counted, giving the true #1 a
-roughly 2-point "categorical moat." Popularity lives in 0.0-1.0, so no honest
-weight can dethrone that #1 -- it would take a weight above ~3.5, which is
-transparently rigged. The real bias instead corrupts ranks 2 to 5, letting
-popular NON-matches invade the top 5 and push genuine niche matches down.
+The honest headline (verified arithmetic, see the conclusion): the true #1 here,
+a folk/nostalgic exact match, holds a 2.15-point lead over the next song, and
+popularity (range 0.0-1.0) cannot climb that gap until the weight passes 3.52.
+More broadly, we swept every profile in this catalog that has an exact genre+mood
+match and found that no non-matching song overtakes such a #1 below weight 2.73 --
+above the aggressive 2.0 the experiment uses -- so the #1 is safe at every weight
+shown. That moat is a property of THIS catalog's numbers, not a theorem of the
+recipe: a genre-only rival with a perfect energy fit can reach 3.0 and tie a
+genre+mood match. The real bias lands below #1: even a mild, defensible weight
+lets popular NON-matches invade the top 5 and push genuine niche matches down.
 """
 
 from __future__ import annotations
@@ -121,17 +125,22 @@ def main() -> None:
         "Under the pure recipe the folk fan's #1 is Wandering Roads, a perfect\n"
         "genre+mood match AND the lowest-popularity song in the catalog (0.18) --\n"
         "the recommender surfaces a genuine hidden gem. Adding popularity does NOT\n"
-        "dethrone it: a genre+mood exact match scores 3.0 before energy, a roughly\n"
-        "2-point moat that popularity (range 0.0-1.0) cannot climb until the weight\n"
-        "exceeds about 3.5, which would be transparently rigged. The bias instead\n"
-        "corrupts the ranks below #1. At weight 1.0 the more popular of two genuine\n"
-        "mood matches (Golden Hour, pop 0.82) jumps ahead of the less popular one\n"
-        "(Backroad Sunset, pop 0.58). At weight 2.0 two pop chart hits that share\n"
-        "NEITHER genre NOR mood with a folk fan -- Summer Anthem and Sunshine Pop --\n"
-        "crash into the top 5, pushing genuine near-matches out. The lesson: even a\n"
-        "modest popularity thumb on the scale quietly trades the listener's real\n"
-        "taste for whatever is already popular. That is why the shipped recipe stays\n"
-        "pure."
+        "dethrone it: here Wandering Roads (4.00) leads the next song by 2.15 points,\n"
+        "and popularity (range 0.0-1.0) cannot climb that gap until the weight passes\n"
+        "3.52. This is not just a lucky profile: sweeping every genre+mood match in\n"
+        "the catalog, no non-matching song overtakes such a #1 below weight 2.73,\n"
+        "above the aggressive 2.0 shown here. The moat is real for THIS catalog, but\n"
+        "it is not guaranteed by the recipe -- a genre-only rival with a perfect\n"
+        "energy fit reaches 3.0 and would merely tie a genre+mood match. The bias\n"
+        "instead corrupts the ranks below #1, and it does so early. At weight 1.0 --\n"
+        "the mild, defensible weight -- Summer Anthem, a pop/happy chart hit that\n"
+        "shares NEITHER genre NOR mood with a folk fan, already crashes into the top\n"
+        "5 (alongside Velvet Touch), burying genuine near-matches Rainy Day Blues and\n"
+        "Acoustic Morning. The mood-match reorder (Golden Hour, pop 0.82, edging past\n"
+        "Backroad Sunset, pop 0.58) is only the mildest symptom. At weight 2.0 the\n"
+        "invaders are Summer Anthem and Sunshine Pop. The lesson: even a modest\n"
+        "popularity thumb on the scale quietly trades the listener's real taste for\n"
+        "whatever is already popular. That is why the shipped recipe stays pure."
     )
 
 

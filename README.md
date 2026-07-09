@@ -87,6 +87,9 @@ Each song in the catalog is described by these features:
 - **energy** -- how energetic the track is, on a 0.0 to 1.0 scale, where higher
   means more energetic.
 - **tempo_bpm** -- the tempo in beats per minute (a whole number).
+- **popularity** -- a crowd-popularity value on a 0.0 to 1.0 scale, where higher
+  means more widely popular. It is recorded for every song but is deliberately
+  NOT scored by the recipe (see the note under Algorithm Recipe).
 
 ### UserProfile features (what VibeFinder knows about you)
 
@@ -119,6 +122,9 @@ scorers. A song's score is the sum of exactly three terms, for a maximum of
   rewards intense ones. Because energy is continuous, this term almost always
   contributes something, so it acts as the natural tie-breaker between songs
   that match on genre and mood.
+
+The `tempo_bpm` feature is recorded for every song but is likewise not scored: it
+correlates closely with energy, so scoring it would double-count that same signal.
 
 **Worked example.** Using the default profile (genre `pop`, mood `happy`,
 target energy `0.8`), two songs both match perfectly on genre and mood, so

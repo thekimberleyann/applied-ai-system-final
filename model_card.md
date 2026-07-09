@@ -146,10 +146,16 @@ Running the recipe across many taste profiles surfaced three consistent patterns
 
 - **Genre dominance / a categorical moat.** Because a genre match is +2.0 and a
   mood match is +1.0, any song that matches both starts at 3.0 before the energy
-  term is counted. That is a roughly two-point lead over any song matching only
-  one field, so a genuine genre-plus-mood match almost always takes the top
-  spot. It is robust at the top, but it also means the whole ranking is decided
-  by genre first, everything else second.
+  term is counted, so a genuine genre-plus-mood match almost always takes the top
+  spot. The size of its lead depends on the profile, not on a fixed rule: in the
+  demonstrated folk / nostalgic profile the number one banks a 2.15-point lead
+  (Wandering Roads 4.00 vs Backroad Sunset 1.85), but this is not guaranteed by
+  the recipe. A mood-only rival with a perfect energy fit reaches 2.0, and a
+  genre-only rival with a perfect energy fit reaches 3.0 -- enough to tie a
+  genre-plus-mood match whose own energy fit is poor, with the tie broken only by
+  catalog order. The moat is robust in practice for this catalog, but it is a
+  property of these numbers rather than a theorem. Either way, the ranking is
+  decided by genre first, everything else second.
 - **Energy is only a weak tiebreaker.** The energy term (0.0 to 1.0) matters when
   two songs already tie on genre and mood, but it is easily swamped by a single
   categorical match. In the Conflicted profile below, a song with a large energy
@@ -168,13 +174,19 @@ The clearest weakness is how fragile the ranking becomes below the top match, an
 how easily a popularity signal would corrupt it. The popularity experiment
 (`python -m src.experiment_popularity`) added a popularity term on top of the pure
 recipe for a folk / nostalgic listener. The deserved number one, Wandering Roads,
-survived because a genre-plus-mood match is structurally hard to unseat, but the
-ranks below it did not: at a modest weight the more popular of two genuine mood
-matches jumped ahead of the less popular one, and at a higher weight two pop chart
-hits that share neither genre nor mood with a folk fan pushed real near-matches
-out of the top five. This is the classic popularity-bias / filter-bubble failure,
-where a crowd signal quietly overrides personal fit, and it is exactly why the
-shipped recipe scores taste only and leaves popularity out.
+survived: it holds a 2.15-point lead here, and popularity (0.0 to 1.0) cannot
+close that gap until the weight passes 3.52. Sweeping every genre-plus-mood match
+in the catalog, no non-matching song overtakes such a number one below weight
+2.73, well above the aggressive 2.0 the experiment uses, so the top spot is safe
+at every weight shown. But this moat is a property of this catalog's numbers, not
+a guarantee of the recipe, since a genre-only rival with a perfect energy fit can
+tie a genre-plus-mood match. The ranks below number one had no such protection:
+even at the mild, defensible weight of 1.0, Summer Anthem -- a pop chart hit
+sharing neither genre nor mood with a folk fan -- climbed into the top five and
+buried real near-matches, and at weight 2.0 both Summer Anthem and Sunshine Pop
+did. This is the classic popularity-bias / filter-bubble failure, where a crowd
+signal quietly overrides personal fit, and it is exactly why the shipped recipe
+scores taste only and leaves popularity out.
 
 ## Evaluation
 
