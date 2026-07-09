@@ -93,9 +93,18 @@ def load_songs(path: str) -> list[dict]:
                     "tempo_bpm": int(row["tempo_bpm"]),
                     "popularity": float(row["popularity"]),
                 }
-            except (ValueError, TypeError, KeyError):
+            except (ValueError, TypeError, KeyError, AttributeError):
                 # Malformed row: skip it and keep loading the rest of the file.
                 # We deliberately do NOT re-raise so one bad line is survivable.
+                #
+                # Why AttributeError is in this tuple: csv.DictReader fills any
+                # MISSING TRAILING fields of a short row with None (it does not
+                # leave the key out). So a truncated row that stops before the
+                # genre/mood/artist columns gives row["genre"] == None, and the
+                # None.strip() call above raises AttributeError -- not the
+                # ValueError/TypeError a bad numeric cell would raise. Without
+                # AttributeError here, one such short row would crash the whole
+                # load instead of being skipped like the docstring promises.
                 continue
 
             songs.append(song)

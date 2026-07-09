@@ -99,7 +99,19 @@ def test_load_songs_skips_malformed_rows(tmp_path):
         "Good One,A,Pop,Happy,0.8,120,0.9\n"            # valid
         "Bad Energy,B,Pop,Happy,notanumber,120,0.9\n"   # energy cast fails -> drop
         "Bad Tempo,C,Rock,Sad,0.5,fast,0.4\n"           # tempo cast fails -> drop
-        "Short Row,D,Jazz,Calm,0.3\n"                   # missing columns -> drop
+        # This row has 5 of the 7 columns, so ONLY the two NUMERIC trailing
+        # columns (tempo_bpm, popularity) are missing. DictReader fills those
+        # with None, and float(None)/int(None) raise TypeError -- the already
+        # caught path. It does NOT exercise the AttributeError bug (all string
+        # columns are present), which is exactly why this test used to pass
+        # while that bug was live. The Truncated row below is the real guard.
+        "Numbers Missing,D,Jazz,Calm,0.3\n"             # missing numeric cols -> drop (TypeError)
+        # Regression guard for the AttributeError crash: this row stops after 2
+        # columns, so genre/mood are missing. DictReader yields None for them,
+        # and the None.strip() in load_songs raises AttributeError. Before the
+        # fix this row crashed the whole load; now it must be skipped like any
+        # other malformed row.
+        "Truncated,B\n"                                 # missing string cols -> drop (AttributeError)
         "\n"                                             # fully blank line -> drop
         "Good Two,E,Jazz,Calm,0.3,90,0.5\n"             # valid
     )
@@ -109,6 +121,28 @@ def test_load_songs_skips_malformed_rows(tmp_path):
     songs = load_songs(str(p))
     titles = [s["title"] for s in songs]
     assert titles == ["Good One", "Good Two"]  # only the 2 valid rows remain
+
+
+def test_load_songs_skips_row_missing_string_columns(tmp_path):
+    """Regression guard: a row so short that a STRING column (genre/mood/artist)
+    is missing must be skipped, not crash the load.
+
+    csv.DictReader fills missing trailing fields with None rather than omitting
+    the key, so a truncated row makes row["genre"] == None. load_songs calls
+    None.strip(), which raises AttributeError -- a different exception than the
+    ValueError/TypeError a bad numeric cell raises. This test pins that the
+    except clause catches AttributeError too, so the good rows still load."""
+    csv_text = (
+        "title,artist,genre,mood,energy,tempo_bpm,popularity\n"
+        "Good,A,Pop,Happy,0.8,120,0.9\n"    # valid, must survive
+        "Truncated,B\n"                     # missing genre/mood -> AttributeError -> drop
+    )
+    p = tmp_path / "songs.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    songs = load_songs(str(p))
+    titles = [s["title"] for s in songs]
+    assert titles == ["Good"]  # the truncated row was skipped, not fatal
 
 
 def test_load_songs_normalizes_case_and_whitespace(tmp_path):
