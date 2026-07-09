@@ -238,6 +238,65 @@ term. This is the genre-dominance effect described under Expected Biases: any
 pop/happy match jumps far ahead of songs that only happen to sit near the target
 energy.
 
+## Optional Extension: Genre Diversity Re-Ranking
+
+This is an optional extension, kept deliberately OUTSIDE the shipped recipe. It
+targets the genre-dominance bias documented under Expected Biases -- two
+near-identical pop hits crowding the top of a pop/happy ranking -- and asks a
+different question than the recommender itself: instead of "what fits my vibe,"
+it asks "show me a spread of genres."
+
+**What it does.** `src/diversity.py` takes the already-ranked
+`(song, score, reasons)` list from `recommend_songs`, walks it top to bottom, and
+keeps a song only while its genre has been kept fewer than `max_per_genre` times.
+It is a post-ranking SELECTION step, a side-car that sits beside the recipe
+exactly as the popularity experiment does. Scores and reasons pass through
+completely unmodified; `src/recommender.py` is never touched, so the extension
+deletes cleanly -- remove the file and the recommender is exactly as it was.
+
+**Why it is NOT a scoring term.** Diversity could not be folded into the score
+without breaking a guarantee the model card defines as the testable meaning of
+"transparent." A diversity bonus would push a score above the fixed 0.0 to 4.0
+scale, and a penalty would subtract points that no reason string accounts for,
+breaking the "the reasons always sum to the score" guarantee. The only honest
+place for it is a selection step layered on top of the finished ranking, where it
+never goes near a score.
+
+**How to run it.**
+
+```bash
+python -m src.diversity
+```
+
+**BEFORE / AFTER (default profile, pop / happy / 0.80, max_per_genre=1).**
+
+```
+#  BEFORE (pure recipe)              AFTER (one per genre)
+1  Summer Anthem [pop] 4.00          Summer Anthem [pop] 4.00
+2  Sunshine Pop [pop] 3.95           Midnight Drive [synthwave] 0.95
+3  Midnight Drive [synthwave] 0.95   Crown Season [hip-hop] 0.95
+4  Crown Season [hip-hop] 0.95       Power Up [electronic] 0.92
+5  Power Up [electronic] 0.92        Dance All Night [edm] 0.90
+```
+
+**Two honest findings.** Both argue for keeping the extension out of the shipped
+recipe.
+
+- **A cap of 2 is dead code on this catalog.** There are 20 songs with at most 2
+  of any one genre (pop x2, hip-hop x2, everything else x1), and across all 231
+  (genre, mood, energy) profiles no top-5 ever contains 3 songs of a single
+  genre. A cap of 2 can therefore never fire; only a cap of 1 changes anything,
+  which is why 1 is the default. This echoes the earlier popularity tie-breaker
+  that was rejected for the same reason: a knob that almost never fires is not
+  worth shipping.
+- **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop, a
+  genuine 3.95 pop/happy match, and promotes Dance All Night at 0.90 -- an edm
+  song that matches NEITHER the listener's genre NOR their mood. That is a
+  3.05-point quality cost for one slot of genre breadth. It does curb the
+  genre-dominance bias, but it spends the listener's stated taste on variety they
+  did not ask for. That trade is why the shipped `recommend_songs` is left
+  unchanged and diversity stays a separate, optional module.
+
 ## Testing
 
 ```bash
@@ -246,9 +305,11 @@ python -m pytest
 
 The test suite is a quality add -- the assignment does not require tests, but they
 act as a reproducibility and regression guard and double as an executable
-specification of the recipe. There are 35 tests across two files. `tests/`
-`test_recommender.py` covers the core recipe and `tests/test_evaluation.py` covers
-the Phase 4 evaluation profiles and the popularity experiment. Together they cover:
+specification of the recipe. There are 50 tests across three files. `tests/`
+`test_recommender.py` covers the core recipe, `tests/test_evaluation.py` covers
+the Phase 4 evaluation profiles and the popularity experiment, and
+`tests/test_diversity.py` covers the genre diversity re-ranking side-car. Together
+they cover:
 
 - **Loading:** the real catalog loads exactly 20 rows with the right types;
   genre and mood are lower-cased; and malformed rows (a non-numeric cell, a short
@@ -269,3 +330,10 @@ the Phase 4 evaluation profiles and the popularity experiment. Together they cov
   match first, and three popularity-experiment guards (the #1 is never dethroned,
   niche near-matches are buried while pop hits are lifted, and the pure recipe is
   never touched or the catalog mutated).
+- **Diversity re-ranking:** the exact default-profile BEFORE/AFTER at cap 1;
+  scores and reasons pass through as the same objects; neither the input list nor
+  any song dict is mutated; the dead-cap no-op (cap 2 is byte-for-byte the
+  baseline, pinned so nobody quietly re-defaults it); the empty-result edge cases
+  (`k <= 0`, `max_per_genre <= 0`); an unreachable k returns fewer than k rather
+  than relaxing the cap; a missing `genre` key does not crash; and stability
+  (kept songs preserve their relative order).

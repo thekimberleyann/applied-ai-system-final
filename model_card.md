@@ -280,11 +280,19 @@ documented in Observed Behavior/Biases, Limitations, or the Expected Biases. -->
 1. **Add a diversity or anti-popularity guard to soften genre dominance.** Because
    an exact genre-plus-mood match reaches 3.0 before energy is counted, one genre
    can hold the top ranks almost unbeatably, and the popularity experiment showed
-   popular non-matches colonizing ranks 2 through 5. A re-balanced genre weight or
-   a rule limiting how many same-genre (or high-popularity) songs fill the list
-   would directly counter both the categorical-moat bias and the filter-bubble
-   risk. (This would be added on top of the recipe; the base recipe stays three
-   terms and popularity stays out of scoring.)
+   popular non-matches colonizing ranks 2 through 5. The diversity half of this
+   idea is now IMPLEMENTED as an optional extension in `src/diversity.py`: a
+   post-ranking selection step that caps how many same-genre songs fill the list,
+   kept deliberately out of the shipped recipe. Measuring it produced two findings
+   that made keeping it out the right call. First, the obvious cap of "no more than
+   2 per genre" is dead code on this catalog -- at most 2 songs share any genre and
+   no top-5 across all 231 profiles ever holds 3, so a cap of 2 can never fire;
+   only a cap of 1 does anything. Second, a cap of 1 is not free: on the default
+   profile it demotes a genuine 3.95 pop/happy match and promotes a 0.90 song that
+   matches neither the listener's genre nor mood, a measured 3.05-point quality
+   cost for one slot of breadth. The anti-popularity guard remains future work. (A
+   diversity or popularity guard is a selection step layered on top of the recipe;
+   the base recipe stays three terms and popularity stays out of scoring.)
 2. **Expand the catalog for the thin moods.** Four moods -- dreamy, intense,
    mellow, and sad -- have a single song each, so those profiles get little real
    choice and the mood term barely differentiates results. Adding songs across

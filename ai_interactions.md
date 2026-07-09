@@ -173,3 +173,44 @@ quoted in the model card remains accurate. The suite went from 35 to 40 tests.
 **Decision:** Kept all findings and all fixes. The most valuable one was not a
 line of code. It was learning that a passing test can be worse than no test when
 it is named after a case it does not actually exercise.
+
+---
+
+## 8. A diversity extension, measured before it was built
+
+**What I asked:** I asked for a diversity guard as an optional extension, to
+mitigate the genre-dominance bias I had already documented -- two near-identical
+pop hits crowding the top of a pop/happy ranking. My first instinct was a simple
+cap: no more than 2 songs of any one genre in the shown list.
+
+**What the AI produced:** Before writing the feature, I made the AI measure
+whether my instinct would even do anything. It did not. This catalog has 20 songs
+with at most 2 of any single genre, and brute-forcing all 231 (genre, mood,
+energy) profiles, no top-5 anywhere ever holds 3 songs of one genre. A cap of 2
+can never fire -- it would change nothing, ever. Only a cap of 1 actually alters a
+result. The AI then built `src/diversity.py` as a post-ranking selection side-car,
+not a scoring term: I required that, because a diversity bonus would push a score
+above the fixed 0.0 to 4.0 scale and a penalty would subtract points no reason
+string accounts for, breaking the reasons-sum-to-the-score guarantee. It had to
+sit beside the recipe, the same shape as the popularity experiment, and pass every
+score and reason through untouched.
+
+**My verification and decision:** That dead cap was the third time this same trap
+showed up in this project. The AI's popularity tie-breaker back in entry 3 would
+almost never fire, and here my own diversity cap of 2 would never fire at all. I
+rejected the cap of 2 and set the default to 1. Then I made the AI measure what a
+cap of 1 actually costs, because it is not free. On the default profile it demotes
+Sunshine Pop, a real 3.95 pop/happy match, and promotes Dance All Night at 0.90 --
+an edm song matching neither my genre nor my mood. That is a 3.05-point quality
+cost to buy one slot of genre variety. I confirmed the numbers by running
+`python -m src.diversity` myself and reading the BEFORE/AFTER. The suite went from
+40 to 50 tests, and I made sure one of them pins the dead-cap finding as an
+executable fact, so nobody can quietly "fix" the default back to 2 without a test
+failing. I also confirmed `python -m src.main` and `python -m src.experiment_popularity`
+were unchanged and that `src/recommender.py` was never modified.
+
+**Decision:** Kept, as an optional extension explicitly OUTSIDE the shipped
+recipe. Measuring the cost -- demoting a 3.95 real match for a 0.90 non-match --
+showed diversity answers a different question than the one VibeFinder was built to
+answer. The shipped recommender answers "what fits my vibe"; this side-car answers
+"give me a spread of genres." Different question, different module.
