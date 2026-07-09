@@ -63,6 +63,13 @@ def score_with_popularity(prefs: dict, song: dict, pop_weight: float) -> tuple[f
     same process is not contaminated.
     """
     pure, _reasons = score_song(prefs, song)
+    # `total` is rounded to 2 decimals for DISPLAY only -- it is what the
+    # BEFORE/AFTER tables print. We deliberately do NOT sort on this rounded
+    # value (see rank_with_popularity): rounding before sorting could let two
+    # songs whose true totals differ in the third decimal tie after rounding, and
+    # then the tie would be resolved by catalog order instead of the real
+    # arithmetic. Ranking uses the UNROUNDED total instead so the order reflects
+    # the true numbers; this rounded value is purely a presentation figure.
     total = round(pure + pop_weight * float(song["popularity"]), 2)
     return total, pure
 
@@ -70,12 +77,28 @@ def score_with_popularity(prefs: dict, song: dict, pop_weight: float) -> tuple[f
 def rank_with_popularity(prefs: dict, songs: list[dict], pop_weight: float, k: int = 5) -> list:
     """Score every song with the popularity add-on and return the top-k.
 
-    Each element is (song, total, pure). We stable-sort by total descending, the
-    same convention the shipped recommend_songs uses, so equal totals keep catalog
-    order. We build a fresh list of tuples and never mutate the input catalog.
+    Each element is (song, total, pure), where `total` is the ROUNDED value used
+    for display. We stable-sort DESCENDING, the same convention the shipped
+    recommend_songs uses, so genuinely equal totals keep catalog order.
+
+    Determinism note: we sort on the UNROUNDED total (pure + pop_weight *
+    popularity), recomputed inline in the sort key, NOT on the rounded `total`
+    field. Sorting on the rounded field could manufacture a false tie between two
+    songs whose true totals differ only in the third decimal, and that fake tie
+    would then be broken by catalog order rather than by the real arithmetic.
+    Ranking on the unrounded value removes that wrinkle while the tables still
+    PRINT the rounded `total`. Verified: on this catalog the printed BEFORE/AFTER
+    tables are byte-for-byte identical either way. We build a fresh list of tuples
+    and never mutate the input catalog.
     """
     scored = [(song,) + score_with_popularity(prefs, song, pop_weight) for song in songs]
-    scored.sort(key=lambda row: row[1], reverse=True)
+    # Sort key = pure taste (row[2]) + pop_weight * popularity, computed WITHOUT
+    # rounding so ties reflect the true totals. row[1] (the rounded display total)
+    # is intentionally not used as the key.
+    scored.sort(
+        key=lambda row: row[2] + pop_weight * float(row[0]["popularity"]),
+        reverse=True,
+    )
     return scored[:k]
 
 

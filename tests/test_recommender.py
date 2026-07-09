@@ -145,6 +145,69 @@ def test_load_songs_skips_row_missing_string_columns(tmp_path):
     assert titles == ["Good"]  # the truncated row was skipped, not fatal
 
 
+def test_load_songs_missing_popularity_column_raises(tmp_path):
+    """A HEADER missing a required column is a broken FILE, not a broken row, so
+    it must raise ValueError -- not silently return [] and let main.py print
+    "Loaded songs: 0". Here the `popularity` column is dropped from the header;
+    without the fix every row raised KeyError, every row was swallowed by the
+    per-row guard, and the load looked like an empty (but valid) dataset. We also
+    assert the error names the exact missing column so the message is actionable."""
+    csv_text = (
+        # Note: no `popularity` column in this header.
+        "title,artist,genre,mood,energy,tempo_bpm\n"
+        "Song,Artist,Pop,Happy,0.8,120\n"
+    )
+    p = tmp_path / "songs.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as excinfo:
+        load_songs(str(p))
+    # The message must name the specific column that is absent.
+    assert "popularity" in str(excinfo.value)
+
+
+def test_load_songs_missing_several_columns_names_all(tmp_path):
+    """When MULTIPLE required columns are absent, the error must list every one of
+    them, not just the first, so a user can fix the file in one pass."""
+    csv_text = (
+        # Missing three columns: mood, tempo_bpm, popularity.
+        "title,artist,genre,energy\n"
+        "Song,Artist,Pop,0.8\n"
+    )
+    p = tmp_path / "songs.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as excinfo:
+        load_songs(str(p))
+    msg = str(excinfo.value)
+    # All three missing columns must be named.
+    assert "mood" in msg
+    assert "tempo_bpm" in msg
+    assert "popularity" in msg
+
+
+def test_load_songs_empty_file_raises_clear_error(tmp_path):
+    """A zero-byte file has no header at all, so csv.DictReader.fieldnames is None.
+    We must convert that into the SAME clear ValueError rather than crashing with a
+    confusing TypeError from set(None). This pins the documented None-handling."""
+    p = tmp_path / "songs.csv"
+    p.write_text("", encoding="utf-8")  # completely empty: zero bytes
+
+    with pytest.raises(ValueError):
+        load_songs(str(p))
+
+
+def test_load_songs_header_only_returns_empty(tmp_path):
+    """A file with a CORRECT header but no data rows is a legitimate empty catalog,
+    not an error: it must still return [] without raising. This pins the existing
+    promise so the new header-validation cannot regress it into a false failure."""
+    csv_text = "title,artist,genre,mood,energy,tempo_bpm,popularity\n"  # header only
+    p = tmp_path / "songs.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    assert load_songs(str(p)) == []
+
+
 def test_load_songs_normalizes_case_and_whitespace(tmp_path):
     """genre/mood are trimmed + lower-cased so matching is case-insensitive."""
     csv_text = (

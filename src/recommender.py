@@ -30,6 +30,21 @@ from __future__ import annotations
 
 import csv
 
+# The seven columns every catalog CSV MUST declare in its header row. We keep
+# this as a module-level constant (rather than inlining it) so the header check
+# in load_songs and any future writer stay in lock-step on the exact schema.
+# Order here is only for a stable, readable error message; the check itself is
+# order-independent because it compares SETS of names, not positions.
+REQUIRED_COLUMNS = (
+    "title",
+    "artist",
+    "genre",
+    "mood",
+    "energy",
+    "tempo_bpm",
+    "popularity",
+)
+
 
 def _to_float(value) -> float | None:
     """Best-effort float conversion.
@@ -59,10 +74,30 @@ def load_songs(path: str) -> list[dict]:
 
     Numeric casting: energy -> float, tempo_bpm -> int, popularity -> float.
 
-    Robustness: a single row with a bad numeric cell (for example energy="abc",
-    a blank line, or a short row missing columns) is SKIPPED, not fatal. We catch
-    ValueError / TypeError / KeyError per row so one corrupt line cannot break
-    loading the other good songs. An empty file (header only) returns [].
+    Header validation (HARD error, checked ONCE before any row is read):
+    a missing HEADER column is a broken FILE, not a broken row, so it must fail
+    loudly instead of silently. Before the fix, if the header lost (say) the
+    `popularity` column, EVERY row raised KeyError, EVERY row was swallowed by the
+    per-row guard below, and load_songs returned [] -- so `python -m src.main`
+    printed "Loaded songs: 0" as if the program worked but the data was empty.
+    That is exactly the failure this validation converts into a clear error.
+    We read reader.fieldnames once and, if any of the seven REQUIRED_COLUMNS are
+    absent, raise ValueError naming precisely which columns are missing.
+
+    Two boundary cases are handled explicitly and documented:
+      * A COMPLETELY EMPTY file (zero bytes) makes reader.fieldnames None. Calling
+        set() on None would raise a confusing TypeError, so we treat None as "no
+        columns at all" and raise the SAME clear ValueError (every required
+        column is reported missing) instead of a cryptic crash.
+      * A HEADER-ONLY file (correct header, no data rows) passes validation and
+        returns [] -- an empty catalog is a legitimate, non-error state.
+
+    Robustness (per ROW, unchanged): a single row with a bad numeric cell (for
+    example energy="abc", a blank line, or a short row missing columns) is
+    SKIPPED, not fatal. We catch ValueError / TypeError / KeyError / AttributeError
+    per row so one corrupt line cannot break loading the other good songs. Note
+    the distinction: a missing whole COLUMN is fatal (above), but a bad or missing
+    CELL in one row is survivable (below).
     """
     songs: list[dict] = []
 
@@ -72,6 +107,25 @@ def load_songs(path: str) -> list[dict]:
         # DictReader maps each row to a dict keyed by the header names, which is
         # exactly the shape main.py wants (song['title'], song['genre'], ...).
         reader = csv.DictReader(f)
+
+        # --- Validate the HEADER once, up front (before the row loop) ---------
+        # reader.fieldnames is the parsed header row, or None for a zero-byte
+        # file (there is no header to parse). We guard the None case explicitly
+        # so set(None) never raises a confusing TypeError -- an empty file simply
+        # has none of the required columns.
+        header = reader.fieldnames  # list[str] | None
+        present = set(header) if header is not None else set()
+        # Report the missing columns in the canonical REQUIRED_COLUMNS order (not
+        # set order) so the error message is stable and easy to read.
+        missing = [col for col in REQUIRED_COLUMNS if col not in present]
+        if missing:
+            # A missing column means the file's schema is broken. Fail loudly and
+            # name exactly which columns are absent, rather than silently loading
+            # zero songs and letting the caller misread it as "empty dataset."
+            raise ValueError(
+                "songs CSV is missing required column(s): "
+                + ", ".join(missing)
+            )
 
         for row in reader:
             try:
