@@ -14,9 +14,9 @@ drafted and critiqued, and I decided.
 
 ## 1. Two-agent debate as the working method
 
-**What I asked:** For each phase, I had the AI work as two roles instead of one --
-an implementer that proposed a solution and an adversarial reviewer that tried to
-break it -- and then converge, with the work integrated only after I reviewed it.
+**What I asked:** For each phase, I had the AI work as two roles instead of one. This
+included an implementer that proposed a solution and an adversarial reviewer that tried to
+break it and then converge, with the work integrated only after I reviewed it.
 
 **What the AI produced:** Paired proposals and critiques at every phase. The
 implementer drafted the recipe, code, or wording; the reviewer attacked edge
@@ -179,7 +179,7 @@ it is named after a case it does not actually exercise.
 ## 8. A diversity extension, measured before it was built
 
 **What I asked:** I asked for a diversity guard as an optional extension, to
-mitigate the genre-dominance bias I had already documented -- two near-identical
+mitigate the genre-dominance bias I had already documented: two near-identical
 pop hits crowding the top of a pop/happy ranking. My first instinct was a simple
 cap: no more than 2 songs of any one genre in the shown list.
 
@@ -200,7 +200,7 @@ showed up in this project. The AI's popularity tie-breaker back in entry 3 would
 almost never fire, and here my own diversity cap of 2 would never fire at all. I
 rejected the cap of 2 and set the default to 1. Then I made the AI measure what a
 cap of 1 actually costs, because it is not free. On the default profile it demotes
-Sunshine Pop, a real 3.95 pop/happy match, and promotes Dance All Night at 0.90 --
+Sunshine Pop, a real 3.95 pop/happy match, and promotes Dance All Night at 0.90,
 an edm song matching neither my genre nor my mood. That is a 3.05-point quality
 cost to buy one slot of genre variety. I confirmed the numbers by running
 `python -m src.diversity` myself and reading the BEFORE/AFTER. The suite went from
@@ -210,7 +210,7 @@ failing. I also confirmed `python -m src.main` and `python -m src.experiment_pop
 were unchanged and that `src/recommender.py` was never modified.
 
 **Decision:** Kept, as an optional extension explicitly OUTSIDE the shipped
-recipe. Measuring the cost -- demoting a 3.95 real match for a 0.90 non-match --
-showed diversity answers a different question than the one VibeFinder was built to
-answer. The shipped recommender answers "what fits my vibe"; this side-car answers
+recipe. Measuring the cost, demoting a 3.95 real match for a 0.90 non-match,
+showed that diversity answers a different question than the one VibeFinder was
+built to answer. The shipped recommender answers "what fits my vibe"; this side-car answers
 "give me a spread of genres." Different question, different module.
