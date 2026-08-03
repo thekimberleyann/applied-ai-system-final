@@ -60,7 +60,10 @@ the retriever pulls the relevant note from `data/song_notes.md`, and the explain
 (offline stub or live Gemini) phrases a grounded "why," falling back to score-only if
 no note is confident enough. Automated tests and human review sit on the output to
 confirm the explainer never changed the ranking and never invented facts. The full
-diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd).
+diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd)
+(rendered below).
+
+![VibeFinder architecture](assets/architecture.png)
 
 ## Setup and Run
 

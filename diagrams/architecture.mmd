@@ -1,14 +1,14 @@
+flowchart TD
 %% VibeFinder applied AI system -- architecture and data flow.
 %% Source of truth for the diagram (a .mmd Mermaid source file, as required).
 %% Render at https://mermaid.live or with the Mermaid CLI to export a PNG.
 %%
-%% Reading it: a taste profile flows left to right through the deterministic
+%% Reading it: a taste profile flows top to bottom through the deterministic
 %% recommender, then the RAG layer (retriever + explainer) attaches a grounded
 %% explanation WITHOUT changing the ranking. Dashed lines are the checks:
 %% automated tests and human review sit on the output, and the guardrail reroutes
 %% to a score-only fallback whenever retrieval finds no relevant note.
 
-flowchart TD
     A["User taste profile<br/>genre, mood, target energy"] --> B
 
     subgraph CORE["Deterministic core (unchanged from Module 3)"]
@@ -16,27 +16,24 @@ flowchart TD
         C[("Song catalog<br/>data/songs.csv")] --> B
     end
 
-    B -->|"top-k (song, score, reasons)<br/>ranking is FINAL here"| D
+    B -->|"top-k song, score, reasons<br/>ranking is FINAL here"| D
 
     subgraph RAG["RAG explanation layer (Project 5 extension)"]
         D["Retriever<br/>src/retriever.py<br/>token-overlap search + confidence"]
         E[("Note corpus<br/>data/song_notes.md")] --> D
         D -->|"note above confidence floor"| F["Explainer<br/>src/llm_client.py"]
-        D -.->|"no note / below floor<br/>GUARDRAIL"| G["Score-only fallback<br/>(no invented facts)"]
+        D -.->|"no note / below floor<br/>GUARDRAIL"| G["Score-only fallback<br/>no invented facts"]
         F --> H{"GEMINI_API_KEY set?"}
         H -->|"no (default)"| I["Offline stub<br/>deterministic, grounded"]
         H -->|"yes"| J["Live Gemini<br/>grounded prompt, refuse-to-invent"]
     end
 
-    I --> K["Explained recommendations<br/>ranked list + grounded 'why'"]
+    I --> K["Explained recommendations<br/>ranked list + grounded why"]
     J --> K
     G --> K
-
     K --> OUT["CLI output<br/>src/main.py"]
 
-    %% Orchestration + observability
     O["Orchestrator<br/>src/explain.py"] -.->|"logs confidence, mode, grounded"| L[["Run log<br/>per-recommendation trail"]]
 
-    %% Where checking happens (dashed = verification, not data flow)
     T["Automated tests<br/>pytest, 62 tests"] -.->|"pin: no re-rank,<br/>grounding, guardrail"| RAG
     HUMAN["Human review<br/>reads output + model_card"] -.->|"sanity-check explanations"| OUT
