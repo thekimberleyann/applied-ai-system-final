@@ -1,0 +1,11 @@
+# Streamlit theme -- matches Kim's portfolio (Blush + Lavender palette).
+# Base colors are set here; fonts, the gradient background, and chip styling are
+# layered on in app.py via a small CSS block (Streamlit config cannot load a
+# custom web font on its own).
+[theme]
+base = "light"
+primaryColor = "#D97A8C"            # dusty rose accent (buttons, slider, focus)
+backgroundColor = "#FDEEF1"         # blush page background (cream)
+secondaryBackgroundColor = "#FFF7F9" # paper -- sidebar and cards
+textColor = "#3A1F33"               # deep-plum ink
+font = "serif"

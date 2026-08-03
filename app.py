@@ -97,10 +97,76 @@ def _compute(genre: str, mood: str, energy: float, k: int,
     return results, client.mode
 
 
+# CSS to match Kim's portfolio (Blush + Lavender, IBM Plex fonts, soft gradient).
+# Base colors come from .streamlit/config.toml; this adds the web fonts, the gradient
+# background, and chip/card polish that config alone cannot express.
+_PORTFOLIO_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap');
+
+:root {
+  --cream:#FDEEF1; --paper:#FFF7F9; --ink:#3A1F33; --muted:#7A5768;
+  --border:#F3D6DE; --rose:#D97A8C; --rose-soft:#FBDCE3; --sage:#B08FB5;
+}
+
+/* Body font: IBM Plex Sans everywhere. */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"],
+.stMarkdown, p, div, span, label, input, button, select, textarea {
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+/* Display font: IBM Plex Serif for headings, in deep-plum ink. */
+h1, h2, h3, h4 {
+  font-family: 'IBM Plex Serif', serif !important;
+  color: var(--ink); letter-spacing: -0.01em;
+}
+h1 { font-weight: 600; }
+
+/* Blush page with the portfolio's soft radial gradients. */
+[data-testid="stAppViewContainer"] {
+  background-color: var(--cream);
+  background-image:
+    radial-gradient(circle at 10% 0%, rgba(217,122,140,0.07), transparent 50%),
+    radial-gradient(circle at 90% 20%, rgba(176,143,181,0.07), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Reason tags render as inline <code>; style them as rose chips. */
+code {
+  background: var(--rose-soft) !important; color: var(--ink) !important;
+  border-radius: 6px; padding: 1px 7px; font-size: 0.8rem;
+  font-family: 'IBM Plex Sans', sans-serif !important;
+}
+
+/* Recommendation cards: paper surface, soft rose hairline, rounded. */
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: var(--paper);
+  border: 1px solid var(--border) !important;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(58,31,51,0.04);
+}
+
+/* Rose primary button. */
+[data-testid="stFormSubmitButton"] button {
+  background: var(--rose); color: #fff; border: none; border-radius: 10px;
+  font-weight: 500;
+}
+[data-testid="stFormSubmitButton"] button:hover { background: #cf6b7e; color:#fff; }
+
+/* Info banner tinted lavender rather than default blue. */
+[data-testid="stAlert"] {
+  background: #ECDCEF; color: var(--ink); border-radius: 10px;
+}
+
+::selection { background: var(--rose-soft); color: var(--ink); }
+</style>
+"""
+
+
 def main() -> None:
     # Wide layout so the app uses the full window and scales with the screen; the
     # content is then held in a responsive centered column below.
     st.set_page_config(page_title="VibeFinder", layout="wide")
+    st.markdown(_PORTFOLIO_CSS, unsafe_allow_html=True)
 
     songs = _load_catalog()
     genres = sorted({s["genre"] for s in songs})
