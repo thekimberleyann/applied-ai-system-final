@@ -130,11 +130,17 @@ h1 { font-weight: 600; }
   background-attachment: fixed;
 }
 
-/* Reason tags render as inline <code>; style them as rose chips. */
+/* Reason tags render as inline <code>; style them as well-defined rose pills.
+   A visible rose border + darker rose text gives the chip a clear edge against
+   the near-white card, and stronger text weight makes them easy to read. */
 code {
-  background: var(--rose-soft) !important; color: var(--ink) !important;
-  border-radius: 6px; padding: 1px 7px; font-size: 0.8rem;
+  background: var(--rose-soft) !important;
+  color: #7A2E43 !important;               /* deep rose text -- strong contrast */
+  border: 1px solid #E39BAC !important;    /* defined pill edge */
+  border-radius: 999px; padding: 2px 10px;
+  font-size: 0.8rem; font-weight: 600;
   font-family: 'IBM Plex Sans', sans-serif !important;
+  white-space: nowrap;
 }
 
 /* Recommendation cards: paper surface, soft rose hairline, rounded. */
