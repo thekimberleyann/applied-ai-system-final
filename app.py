@@ -283,9 +283,8 @@ def main() -> None:
                                            single_rag, single_live, single_div)
         mode_label = "Live (Gemini)" if mode == "live" else "Offline (deterministic)"
         st.info(f"Explainer mode: **{mode_label}**  |  catalog: {size} songs")
-        left, center, right = st.columns([1, 4, 1])
-        with center:
-            _render_results(results)
+        # Full-width results, spanning the screen like the banner above.
+        _render_results(results)
         return
 
     # Compare view: two independently-configured pipelines, same profile.
