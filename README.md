@@ -179,6 +179,34 @@ Test log: [`assets/pytest_summary.txt`](assets/pytest_summary.txt).
   system auditable: the ranking is always the deterministic recipe, and a test proves
   the explainer cannot change it.
 
+### How the song categories are grounded
+
+The catalog's `genre / mood / energy` schema is a deliberate, principled simplification
+of how the music industry and music-information-retrieval (MIR) research categorize
+tracks, not an ad-hoc choice:
+
+- **Genre** follows the standard "one label from a bounded list" pattern. The canonical
+  MIR benchmark, the GTZAN genre collection, uses a fixed set of 10 genres (blues,
+  classical, country, disco, hip-hop, jazz, metal, pop, reggae, rock); this catalog
+  uses 9 of those 10 plus a few adjacent labels.
+- **Energy** (0.0-1.0) matches Spotify's `energy` audio feature exactly in both concept
+  ("perceptual intensity and activity") and scale, so this dimension mirrors a
+  production system rather than inventing a metric.
+- **Mood** is a single word from the common vocabulary seen in mood-tagged datasets
+  (happy, sad, calm, energetic, chill, romantic...). This is a documented simplification:
+  Spotify has no single mood field and instead derives mood from `valence` + `energy`,
+  a 2-D model (Russell's valence-arousal circumplex). A single mood word collapses that
+  plane to one point, so, for example, "sad" (low energy, low valence) and "angry" (high
+  energy, low valence) are not cleanly separated. The natural upgrade -- out of this
+  project's scope -- is to add a `valence` 0.0-1.0 field to recover the mood quadrant.
+
+In short, `energy` is modeled the industry-standard way, `genre` mirrors the most-cited
+MIR benchmark, and `mood` is a lightweight, interpretable stand-in for the valence axis.
+
+Sources: GTZAN genre collection (Tzanetakis & Cook, 2002); Spotify Web API audio-features
+reference (`energy`, `valence` definitions); Russell's circumplex model of affect (1980,
+the valence-arousal basis for the mood quadrant).
+
 ## Testing Summary
 
 62 automated tests pass (up from 50 in Module 3): the original 50 recipe/evaluation/

@@ -70,6 +70,17 @@ design, and it is used only in the Phase 4 bias experiment. See the Algorithm
 Summary. Recommendations are made against a user profile with three fields:
 favorite_genre, favorite_mood, and target_energy.
 
+This schema is a deliberate simplification of how the industry and MIR research
+categorize music, not an ad-hoc choice. The `energy` 0.0-1.0 field matches Spotify's
+`energy` audio feature in concept and scale; the single-label `genre` mirrors the
+bounded-list convention of the GTZAN benchmark (10 fixed genres, 9 of which this
+catalog uses); and the single-word `mood` is an interpretable stand-in for the
+valence axis of Russell's valence-arousal model, which Spotify approximates with
+`valence` + `energy`. The known cost is that one mood word cannot separate, e.g.,
+"sad" (low energy, low valence) from "angry" (high energy, low valence); adding a
+`valence` field is the documented upgrade path. (Full sources in the README design
+notes.)
+
 Catalog make-up, which is the baseline for the Phase 4 bias study:
 
 - The 20 songs skew toward pop and high-energy tracks, and one cluster of
