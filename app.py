@@ -134,11 +134,11 @@ h1 { font-weight: 600; }
    A visible rose border + darker rose text gives the chip a clear edge against
    the near-white card, and stronger text weight makes them easy to read. */
 code {
-  background: var(--rose-soft) !important;
-  color: #7A2E43 !important;               /* deep rose text -- strong contrast */
-  border: 1px solid #E39BAC !important;    /* defined pill edge */
-  border-radius: 999px; padding: 2px 10px;
-  font-size: 0.8rem; font-weight: 600;
+  background: #F7D0D9 !important;          /* soft rose, a touch deeper than the tint */
+  color: #3A1F33 !important;               /* deep-plum ink -- maximum contrast */
+  border: 1px solid #D97A8C !important;    /* full dusty-rose -- clearly defined edge */
+  border-radius: 999px; padding: 2px 11px;
+  font-size: 0.82rem; font-weight: 600;
   font-family: 'IBM Plex Sans', sans-serif !important;
   white-space: nowrap;
 }
@@ -195,8 +195,8 @@ def main() -> None:
             one_per_genre = st.checkbox(
                 "Genre variety (one per genre)",
                 value=False,
-                help="Optional diversity re-ranking: show a spread of genres instead "
-                     "of letting one genre dominate. Trades some taste-match for variety.",
+                help="Mix up the results so you don't get several songs from the same "
+                     "genre. You'll trade a little taste-match for more variety.",
             )
             use_live = st.checkbox(
                 "Use live AI phrasing (slower)",
