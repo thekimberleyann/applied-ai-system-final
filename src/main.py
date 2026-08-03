@@ -13,12 +13,21 @@ of Phase 4 evaluation profiles:
 
 This file only READS from recommender.py. It never changes the scoring recipe.
 The popularity-bias experiment lives in its own module, src/experiment_popularity.py.
+
+RAG explanation layer (Project 5): the default run below now attaches a grounded
+natural-language explanation to each recommendation via src/explain.py (retrieve a
+factual note -> LLM/offline-stub phrases the "why"). It runs offline and
+deterministically unless GEMINI_API_KEY is set. The scoring/ranking is unchanged;
+the explainer only adds prose to songs the recipe already chose.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 
+from src.explain import explain_recommendations, format_block, load_corpus
+from src.llm_client import VibeExplainer
 from src.recommender import load_songs, recommend_songs
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "songs.csv")
@@ -93,29 +102,91 @@ def print_recommendations(header: str, prefs: dict, songs: list[dict], k: int = 
     print()  # blank line between blocks
 
 
-def main() -> None:
-    songs = load_songs(DATA_PATH)
-    print(f"Loaded songs: {len(songs)}")
-    print()
+def run_rag_block(header: str, prefs: dict, songs: list[dict],
+                  notes: dict, client: VibeExplainer, k: int = 5) -> list[dict]:
+    """Explain one profile's top-k via the RAG layer, print it, return the results.
 
-    # 1. The default run (unchanged output, still documented in the README).
-    print_recommendations(
-        "=== Recommendations for the default profile (pop / happy) ===",
-        DEFAULT_PROFILE,
-        songs,
+    Returns the structured result list so main() can compute the reliability
+    summary (how many recommendations were grounded on a note vs fell back).
+    """
+    results = explain_recommendations(prefs, songs, notes, client, k=k)
+    print(format_block(header, results))
+    return results
+
+
+def main() -> None:
+    # Configure logging for the whole run. The RAG orchestrator emits one INFO line
+    # per recommendation (retrieval confidence, explainer mode, guardrail state);
+    # sending it to stderr keeps stdout clean for the pasteable recommendation
+    # output while still leaving an auditable trail.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="LOG %(levelname)s %(name)s: %(message)s",
     )
 
-    # 2. Diverse / stress battery.
-    print("### DIVERSE / STRESS PROFILES ###")
+    songs = load_songs(DATA_PATH)
+    print(f"Loaded songs: {len(songs)}")
+
+    # Build the RAG pieces once: load the note corpus and construct the explainer.
+    # The explainer picks live vs offline at construction; we report which so the
+    # output is self-documenting about whether a key was present.
+    notes = load_corpus()
+    client = VibeExplainer()
+    print(f"RAG explainer mode: {client.mode}  |  notes loaded: {len(notes)}")
+    print()
+
+    # 1. Default run, now WITH grounded RAG explanations (the AI feature in action).
+    default_results = run_rag_block(
+        "=== Recommendations for the default profile (pop / happy) [RAG] ===",
+        DEFAULT_PROFILE,
+        songs,
+        notes,
+        client,
+    )
+
+    # 2. A second explained profile so the README has multiple RAG interactions and
+    #    a case where a whole scoring term is thin. Chill Lofi exercises a different
+    #    corner of taste space than the default pop profile.
+    lofi_results = run_rag_block(
+        "=== Chill Lofi (lofi / chill / energy 0.30) [RAG] ===",
+        {"favorite_genre": "lofi", "favorite_mood": "chill", "target_energy": 0.30},
+        songs,
+        notes,
+        client,
+    )
+
+    # 3. Diverse / stress battery -- score-only, to keep the reliability picture of
+    #    the raw recipe visible (no explanations needed here).
+    print("### DIVERSE / STRESS PROFILES (score-only) ###")
     print()
     for label, prefs in DIVERSE_PROFILES:
         print_recommendations(f"=== {label} ===", prefs, songs)
 
-    # 3. Adversarial battery.
-    print("### ADVERSARIAL PROFILES ###")
+    # 4. Adversarial battery -- score-only, probing the recipe edges.
+    print("### ADVERSARIAL PROFILES (score-only) ###")
     print()
     for label, prefs in ADVERSARIAL_PROFILES:
         print_recommendations(f"=== {label} ===", prefs, songs)
+
+    # 5. Reliability summary: across the two explained blocks, how many
+    #    recommendations were grounded on a retrieved note vs. fell back to
+    #    score-only. This one line is the guardrail/reliability evidence.
+    explained = default_results + lofi_results
+    grounded = sum(1 for r in explained if r["grounded"])
+    total = len(explained)
+    avg_conf = (
+        sum(r["confidence"] for r in explained) / total if total else 0.0
+    )
+    print("### RELIABILITY SUMMARY (RAG layer) ###")
+    print(
+        f"{grounded}/{total} explained recommendations were grounded on a "
+        f"retrieved note; average retrieval confidence {avg_conf:.2f}; "
+        f"explainer mode = {client.mode}."
+    )
+    print(
+        "Guardrail: any recommendation with no note above the confidence floor "
+        "falls back to a score-only explanation instead of inventing details."
+    )
 
 
 if __name__ == "__main__":
