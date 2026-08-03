@@ -6,3 +6,7 @@ pytest-cov>=4.0
 # offline and deterministic without it, so it is intentionally NOT a hard dependency.
 # Install only if you set GEMINI_API_KEY and want model-phrased explanations.
 # google-genai>=1.0
+
+# Optional: the Streamlit web UI (app.py). The CLI is the graded path; install this
+# only if you want the point-and-click interface.
+# streamlit>=1.30

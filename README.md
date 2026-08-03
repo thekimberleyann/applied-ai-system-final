@@ -88,6 +88,22 @@ export GEMINI_API_KEY=your_key_here      # PowerShell: $env:GEMINI_API_KEY="..."
 python -m src.main
 ```
 
+## Optional: Web UI (Streamlit)
+
+A small Streamlit front-end (`app.py`) is included for a point-and-click experience.
+It is optional polish -- the CLI above is the graded, reproducible path -- and it adds
+no new logic: it collects a taste profile from dropdowns and a slider and calls the
+same `recommend` / `retrieve` / `explain` code, showing each ranked song with its
+grounded explanation. It also offers a "genre variety" toggle (the diversity re-rank).
+
+```bash
+pip install streamlit
+streamlit run app.py
+```
+
+Like the CLI, it runs offline by default and uses live Gemini automatically if a key
+is present (shell env var or a local `.env`). A mode banner shows which is active.
+
 ## Sample Interactions (RAG output, captured from `python -m src.main`)
 
 Full captured run: [`assets/sample_run.txt`](assets/sample_run.txt).
