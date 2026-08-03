@@ -233,9 +233,13 @@ def main() -> None:
     # immediately; everything else is inside a form so it only runs on submit.
     with st.sidebar:
         st.header("VibeFinder")
-        view = st.radio("View", ["Single", "Compare"], horizontal=True,
-                        help="Single: the finished system. Compare: build two "
-                             "pipelines and see them side by side.")
+        view = st.radio(
+            "View", ["Single", "Compare"], horizontal=True,
+            help="Single runs the finished Project 5 system (recommender + RAG "
+                 "explanations). Compare lets you build two pipelines from the same "
+                 "taste profile and see them side by side, to show what each Project "
+                 "5 change actually did.",
+        )
 
         with st.form("controls"):
             st.subheader("Taste profile")
@@ -275,7 +279,39 @@ def main() -> None:
         "A content-based music recommender with grounded, plain-language "
         "explanations. Build a taste profile and see what fits your vibe, and why."
     )
+
+    # Collapsible explainer, open by default. Explains both views and what each
+    # toggle in Compare mode actually changes, so a first-time viewer understands
+    # what is being compared and why it matters.
+    with st.expander("About VibeFinder — what you're looking at", expanded=True):
+        st.markdown(
+            "**VibeFinder** started as a simple Module 3 recommender (score each song "
+            "on genre, mood, and energy; return a ranked list with terse rule-based "
+            "reasons). For Project 5 it was extended with a **RAG explanation layer** "
+            "that retrieves a factual note about each pick and writes a grounded "
+            "plain-language *why this fits you*, and its song catalog was expanded and "
+            "rebalanced.\n\n"
+            "- **Single view** runs the finished system: the recommender plus RAG "
+            "explanations, on the expanded 46-song catalog.\n"
+            "- **Compare view** is a build-your-own A/B lab. The same taste profile is "
+            "run through **two pipelines side by side**, and you flip each Project 5 "
+            "change independently on each side to see what it did:\n"
+            "    - **Catalog** — Original 20 (Module 3) vs Expanded 46 (rebalanced). "
+            "Shows the effect of fixing the pop/high-energy skew and the thin moods "
+            "(e.g. a *metal / intense* profile has no real match on 20 songs but a "
+            "full match on 46).\n"
+            "    - **RAG explanations** — off gives the original terse score reasons; "
+            "on gives the grounded natural-language explanation.\n"
+            "    - **Live AI phrasing** — offline deterministic wording vs Gemini-"
+            "written (needs a key).\n"
+            "    - **Genre variety** — cap the list to one song per genre.\n\n"
+            "The comparison is authentic: the score-only path is the untouched Module "
+            "3 recommender, and the 20-song catalog is the original data from git."
+        )
+
     st.subheader(f"{genre} / {mood} / energy {energy:.2f}")
+    if view == "Compare":
+        st.caption("Same taste profile, two pipelines. Configure each side in the sidebar.")
 
     if view == "Single":
         with st.spinner("Finding your vibe..."):
