@@ -78,8 +78,13 @@ python -m pytest
 
 # Optional live mode: set a key to have Gemini phrase the explanations.
 # (Offline stub is used automatically if this is unset or google-genai is absent.)
-export GEMINI_API_KEY=your_key_here      # PowerShell: $env:GEMINI_API_KEY="..."
 pip install google-genai
+
+# Provide the key either as an environment variable ...
+export GEMINI_API_KEY=your_key_here      # PowerShell: $env:GEMINI_API_KEY="..."
+                                         # Command Prompt: set GEMINI_API_KEY=...
+# ... or, to avoid retyping it, copy .env.example to .env and put the key there.
+# .env is gitignored, so the key is never committed; main.py loads it automatically.
 python -m src.main
 ```
 

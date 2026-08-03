@@ -32,6 +32,42 @@ from src.recommender import load_songs, recommend_songs
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "songs.csv")
 
+# Path to an OPTIONAL local .env at the repo root. It is gitignored, so a key put
+# here is never committed. See _load_dotenv_if_present below.
+ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env")
+
+
+def _load_dotenv_if_present() -> None:
+    """Load KEY=VALUE lines from a local .env into the environment, if it exists.
+
+    This lets the Gemini key live in a gitignored .env file instead of being
+    retyped every session. Deliberately dependency-free: we parse the file
+    ourselves rather than requiring python-dotenv, so the default offline path
+    still needs zero third-party packages and stays reproducible.
+
+    Behavior:
+      * No .env file           -> no-op (the normal offline case).
+      * `# comment` / blank     -> skipped.
+      * `KEY=VALUE`             -> set only if KEY is not ALREADY in the real
+                                   environment (os.environ.setdefault), so an
+                                   explicit `set GEMINI_API_KEY=...` in the shell
+                                   always wins over the file.
+    Surrounding single/double quotes on the value are stripped for convenience.
+    """
+    if not os.path.exists(ENV_PATH):
+        return
+    with open(ENV_PATH, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key:
+                # Do not clobber a value already exported in the shell.
+                os.environ.setdefault(key, val)
+
 # The default profile the app has always run: a mainstream, upbeat listener.
 # NOTE the key names: score_song reads favorite_genre / favorite_mood /
 # target_energy, so every profile dict below MUST use exactly these keys or the
@@ -123,6 +159,10 @@ def main() -> None:
         level=logging.INFO,
         format="LOG %(levelname)s %(name)s: %(message)s",
     )
+
+    # Pull in a local .env (if any) BEFORE constructing the explainer, so a key
+    # stored there is visible when VibeExplainer decides live vs offline.
+    _load_dotenv_if_present()
 
     songs = load_songs(DATA_PATH)
     print(f"Loaded songs: {len(songs)}")

@@ -119,15 +119,25 @@ class VibeExplainer:
     def _first_sentence(note: str) -> str:
         """Return the note's first sentence, without splitting on decimal points.
 
-        A naive note.split('.')[0] truncates 'high energy at 0.85 ...' at '0'
-        because the decimal point looks like a sentence end. We instead match up to
-        the first period that is followed by whitespace or end-of-string, so a
-        period inside a number (no following space) is not treated as a boundary.
+        Two traps a naive note.split('.')[0] falls into, both handled here:
+          * decimals: 'high energy at 0.85' would truncate at '0'. We only treat a
+            period as a boundary when whitespace or end-of-string follows it, so a
+            period inside a number (followed by a digit) is never a boundary.
+          * initials: 'the A. Keys Trio' would truncate at 'A'. We skip any period
+            whose preceding token is a single uppercase letter (an initial) and
+            take the next real sentence end instead.
         """
         text = note.strip()
-        m = re.match(r".*?[.](?=\s|$)", text, re.S)
-        # Strip the trailing period so the caller can add its own '. '.
-        return (m.group(0).rstrip(".").strip() if m else text.rstrip("."))
+        for m in re.finditer(r"[.](?=\s|$)", text):
+            preceding = re.search(r"(\S+)$", text[: m.start()])
+            token = preceding.group(1) if preceding else ""
+            if len(token) == 1 and token.isalpha() and token.isupper():
+                # A single-letter initial (e.g. "A." in "A. Keys Trio"); not a
+                # sentence end -- keep scanning for the next boundary.
+                continue
+            return text[: m.start()].strip()
+        # No usable boundary found: return the whole note, trailing period removed.
+        return text.rstrip(".")
 
     # ------------------------------------------------------------------
     # Live Gemini path
