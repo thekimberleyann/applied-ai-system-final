@@ -158,10 +158,11 @@ code {
 }
 [data-testid="stFormSubmitButton"] button:hover { background: #cf6b7e; color:#fff; }
 
-/* Info banner tinted lavender rather than default blue. */
+/* Info banner styled to match the "Find songs" button: rose fill, white text. */
 [data-testid="stAlert"] {
-  background: #ECDCEF; color: var(--ink); border-radius: 10px;
+  background: var(--rose) !important; border-radius: 10px; border: none;
 }
+[data-testid="stAlert"] * { color: #fff !important; fill: #fff !important; }
 
 ::selection { background: var(--rose-soft); color: var(--ink); }
 </style>
