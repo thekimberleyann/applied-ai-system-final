@@ -282,6 +282,68 @@ arise.
    adjust the profile between runs, would let results respond to the listener
    instead of being fixed in code.
 
+## Project 5 Reflection: Applied AI System (RAG Extension)
+
+This section is my graded responsible-AI reflection for the Project 5 extension --
+the RAG explanation layer I added on top of the original recommender.
+
+### Limitations and biases in the system
+
+The RAG layer inherits every bias of the recommender underneath it -- genre
+dominance, the pop-and-high-energy skew of the catalog, the four moods that appear
+on only one song -- and then adds its own. The explanation is only ever as good as
+the note it retrieves: if a note is thin or slightly off, the explanation inherits
+that, and my notes are hand-written, so my own wording choices are a bias baked into
+the corpus. There is also a tone bias worth naming -- a fluent "why this fits you"
+can sound more confident than a 0.90 energy-only match deserves, which is why every
+explanation is printed next to its real score and reasons rather than replacing them.
+And the retrieval itself is plain token overlap, so it would not scale past a small,
+well-labeled catalog without something smarter.
+
+### Could the AI be misused, and how I prevent it
+
+The realistic misuse is not dramatic -- it is someone reading the generated
+explanation as a factual claim about a song ("this won awards," "everyone loves
+this") when it is really a vibe match for one listener's stated taste. I designed
+against that three ways. First, the model is only ever allowed to ground on the
+retrieved note, and the live prompt explicitly forbids inventing artists, awards,
+lyrics, or chart positions. Second, when no note clears the confidence floor the
+system refuses to describe the song at all and falls back to a score-only line --
+no note, no claims. Third, the score and its reasons are always shown alongside the
+prose, so the explanation can never be the only thing a reader sees. The LLM never
+ranks, so it can never be used to quietly promote a song for a reason it will not
+state.
+
+### What surprised me while testing reliability
+
+Two things. The one I keep coming back to: code that runs is not code that is right.
+My offline explainer ran with zero errors and still produced "A classical piece by
+the A." because it split the note on the first period and hit an artist's initial --
+and earlier, "high energy at 0" because it split on a decimal point. Nothing crashed.
+I only caught both by reading the actual output, and it made me trust green checks a
+little less and my own eyes a little more. The second surprise was how clean the
+"never re-rank" guarantee turned out to be once I wrote a test for it: because the
+ranking is decided before the explainer ever runs, proving the AI cannot change it
+was a three-line assertion, not a hope.
+
+### My collaboration with AI (one helpful, one flawed)
+
+**Helpful.** When I worried the project would be unreproducible if it needed an API
+key, the AI suggested making the explainer default to a deterministic offline stub
+and only call the live model when a key is present. That one decision is what lets
+`python -m src.main` and all 62 tests run identically on any machine with no key and
+no network -- it is the reason a grader can actually run this. I kept it exactly.
+
+**Flawed.** The same AI wrote the first offline explainer using
+`note.split(".")[0]` to grab the note's first sentence. It looked reasonable and ran
+fine, but my notes contain decimals like "high energy at 0.85," so it truncated the
+sentence at "0" and printed "high energy at 0." I caught it by running the program
+and reading the output, not from any error. I replaced it with a splitter that only
+treats a period as a sentence end when a space or line-end follows (and that also
+skips single-letter initials like "A. Keys Trio"), and I pinned the fix with a test
+that asserts the full "0.80" sentence survives. The lesson stuck: I check the AI's
+output against reality rather than trusting that "it ran" means "it is correct."
+
 ## Personal Reflection
 
 ### Biggest learning moment

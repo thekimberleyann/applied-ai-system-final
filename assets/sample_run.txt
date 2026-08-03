@@ -1,0 +1,176 @@
+LOG INFO vibefinder.rag: rec='Summer Anthem' score=4.00 retrieved='Summer Anthem' confidence=1.00 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Sunshine Pop' score=3.95 retrieved='Sunshine Pop' confidence=0.67 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Midnight Drive' score=0.95 retrieved='Midnight Drive' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Crown Season' score=0.95 retrieved='Crown Season' confidence=0.60 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Power Up' score=0.92 retrieved='Power Up' confidence=0.75 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Lofi Rain' score=4.00 retrieved='Lofi Rain' confidence=0.67 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Island Time' score=1.75 retrieved='Island Time' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Acoustic Morning' score=0.95 retrieved='Acoustic Morning' confidence=1.00 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Moonlight Redux' score=0.95 retrieved='Moonlight Redux' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Rainy Day Blues' score=0.90 retrieved='Rainy Day Blues' confidence=0.75 mode=offline grounded=True
+Loaded songs: 20
+RAG explainer mode: offline  |  notes loaded: 20
+
+=== Recommendations for the default profile (pop / happy) [RAG] ===
+1. Summer Anthem  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Summer Anthem: An upbeat pop anthem by Coast Kids, high energy at 0.80 and a danceable 120 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Summer Anthem', confidence 1.00]
+2. Sunshine Pop  (score 3.95)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+     why: Sunshine Pop: A bright, upbeat pop track by The Brights. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Sunshine Pop', confidence 0.67]
+3. Midnight Drive  (score 0.95)
+     - energy close to target (+0.95)
+     why: Midnight Drive: A synthwave cut by Neon Roads with glowing retro synths and a steady 118 BPM pulse. It matched on your target energy.
+          [grounded on 'Midnight Drive', confidence 0.50]
+4. Crown Season  (score 0.95)
+     - energy close to target (+0.95)
+     why: Crown Season: A hip-hop track by Vega Verse, high energy at 0.85 and a hard 102 BPM. It matched on your target energy.
+          [grounded on 'Crown Season', confidence 0.60]
+5. Power Up  (score 0.92)
+     - energy close to target (+0.92)
+     why: Power Up: An electronic track by Arcade Heroes, high energy at 0.88 and a driving 130 BPM. It matched on your target energy.
+          [grounded on 'Power Up', confidence 0.75]
+
+=== Chill Lofi (lofi / chill / energy 0.30) [RAG] ===
+1. Lofi Rain  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Lofi Rain: A calm lofi beat by Study Cat, low energy at 0.30 and a slow 72 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Lofi Rain', confidence 0.67]
+2. Island Time  (score 1.75)
+     - mood match (+1.0)
+     - energy close to target (+0.75)
+     why: Island Time: A reggae song by Palm Groove, mid energy at 0.55 and a loose 76 BPM. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Island Time', confidence 0.50]
+3. Acoustic Morning  (score 0.95)
+     - energy close to target (+0.95)
+     why: Acoustic Morning: A gentle acoustic song by Jane Willow, low energy at 0.35 and an easy 90 BPM. It matched on your target energy.
+          [grounded on 'Acoustic Morning', confidence 1.00]
+4. Moonlight Redux  (score 0.95)
+     - energy close to target (+0.95)
+     why: Moonlight Redux: A classical piece by the A. Keys Trio, the lowest energy in the catalog at 0.25 and
+a slow 60 BPM. It matched on your target energy.
+          [grounded on 'Moonlight Redux', confidence 0.50]
+5. Rainy Day Blues  (score 0.90)
+     - energy close to target (+0.90)
+     why: Rainy Day Blues: A slow blues song by Sad Sax, low-mid energy at 0.40 and an unhurried 85 BPM. It matched on your target energy.
+          [grounded on 'Rainy Day Blues', confidence 0.75]
+
+### DIVERSE / STRESS PROFILES (score-only) ###
+
+=== High-Energy Pop (pop / happy / energy 0.95) ===
+1. Sunshine Pop  (score 3.90)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+2. Summer Anthem  (score 3.85)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+3. Heavy Riff  (score 1.00)
+     - energy close to target (+1.00)
+4. Iron Fury  (score 0.97)
+     - energy close to target (+0.97)
+5. Dance All Night  (score 0.95)
+     - energy close to target (+0.95)
+
+=== Chill Lofi (lofi / chill / energy 0.30) ===
+1. Lofi Rain  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Island Time  (score 1.75)
+     - mood match (+1.0)
+     - energy close to target (+0.75)
+3. Acoustic Morning  (score 0.95)
+     - energy close to target (+0.95)
+4. Moonlight Redux  (score 0.95)
+     - energy close to target (+0.95)
+5. Rainy Day Blues  (score 0.90)
+     - energy close to target (+0.90)
+
+=== Deep Intense Rock (rock / intense / energy 0.95) ===
+1. Heavy Riff  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Iron Fury  (score 0.97)
+     - energy close to target (+0.97)
+3. Dance All Night  (score 0.95)
+     - energy close to target (+0.95)
+4. Power Up  (score 0.93)
+     - energy close to target (+0.93)
+5. Sunshine Pop  (score 0.90)
+     - energy close to target (+0.90)
+
+=== Romantic R&B (r&b / romantic / energy 0.50) ===
+1. Velvet Touch  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Soul Fire  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+3. Blue Notes  (score 0.95)
+     - energy close to target (+0.95)
+4. Backroad Sunset  (score 0.95)
+     - energy close to target (+0.95)
+5. Island Time  (score 0.95)
+     - energy close to target (+0.95)
+
+### ADVERSARIAL PROFILES (score-only) ###
+
+=== Conflicted (blues / sad but target energy 0.95) ===
+1. Rainy Day Blues  (score 3.45)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.45)
+2. Heavy Riff  (score 1.00)
+     - energy close to target (+1.00)
+3. Iron Fury  (score 0.97)
+     - energy close to target (+0.97)
+4. Dance All Night  (score 0.95)
+     - energy close to target (+0.95)
+5. Power Up  (score 0.93)
+     - energy close to target (+0.93)
+
+=== Ghost Genre (kpop not in catalog) ===
+1. Summer Anthem  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Sunshine Pop  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+3. Midnight Drive  (score 0.95)
+     - energy close to target (+0.95)
+4. Crown Season  (score 0.95)
+     - energy close to target (+0.95)
+5. Power Up  (score 0.92)
+     - energy close to target (+0.92)
+
+=== Energy Ceiling (pop / happy / target energy 1.0) ===
+1. Sunshine Pop  (score 3.85)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+2. Summer Anthem  (score 3.80)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.80)
+3. Iron Fury  (score 0.98)
+     - energy close to target (+0.98)
+4. Heavy Riff  (score 0.95)
+     - energy close to target (+0.95)
+5. Dance All Night  (score 0.90)
+     - energy close to target (+0.90)
+
+### RELIABILITY SUMMARY (RAG layer) ###
+10/10 explained recommendations were grounded on a retrieved note; average retrieval confidence 0.69; explainer mode = offline.
+Guardrail: any recommendation with no note above the confidence floor falls back to a score-only explanation instead of inventing details.
