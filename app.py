@@ -6,17 +6,21 @@ collects a taste profile from form controls, calls the existing functions, and
 renders the ranked songs with their grounded RAG explanations. The CLI
 (`python -m src.main`) remains the graded, reproducible path; this is optional polish.
 
+Two views:
+- Single  -- one configuration (the finished Project 5 system).
+- Compare -- a "build your own model" A/B lab: the same taste profile run through two
+  independently-configured pipelines side by side (catalog size, RAG on/off, live vs
+  offline, genre variety), to show what each Project 5 change actually did.
+
 Run it from the repo root:
 
     pip install streamlit
     streamlit run app.py
 
-Performance notes:
-- The UI defaults to the OFFLINE deterministic explainer, so first load is instant --
-  no network and no google-genai import. Turn on "Use live AI phrasing" in the sidebar
-  to have Gemini phrase the explanations (needs GEMINI_API_KEY; slower, one API call
-  per song, and subject to rate limits).
-- Results are cached per (profile, options, mode), so repeating a query is instant.
+Performance: defaults to the OFFLINE deterministic explainer, so first load is instant
+(no network, no google-genai import). Turn on live phrasing to use Gemini (needs
+GEMINI_API_KEY; one API call per song, subject to rate limits). Results are cached
+per (profile, options) so repeats are instant.
 """
 
 from __future__ import annotations
@@ -31,18 +35,24 @@ from src.main import _load_dotenv_if_present
 from src.recommender import load_songs, recommend_songs
 from src.retriever import load_notes, retrieve_note
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "songs.csv")
+_HERE = os.path.dirname(__file__)
+
+# The two selectable catalogs. "Original (20)" is the authentic Module 3 catalog
+# pulled from git history; "Expanded (46)" is the rebalanced Project 5 catalog.
+CATALOGS = {
+    "Expanded (46)": os.path.join(_HERE, "data", "songs.csv"),
+    "Original (20)": os.path.join(_HERE, "data", "songs_original.csv"),
+}
 
 
 # ----------------------------------------------------------------------------
-# Cached loaders. Streamlit re-runs this whole script on every interaction, so we
-# cache the catalog, the note corpus, and the explainer to avoid reloading files
-# and re-constructing the client on each click.
+# Cached loaders. Streamlit re-runs the whole script on every interaction, so we
+# cache file loads and the explainer to keep it snappy.
 # ----------------------------------------------------------------------------
 
 @st.cache_data(show_spinner=False)
-def _load_catalog() -> list[dict]:
-    return load_songs(DATA_PATH)
+def _load_catalog(catalog_key: str) -> list[dict]:
+    return load_songs(CATALOGS[catalog_key])
 
 
 @st.cache_data(show_spinner=False)
@@ -52,54 +62,104 @@ def _load_corpus() -> dict:
 
 @st.cache_resource(show_spinner=False)
 def _get_explainer(force_offline: bool) -> VibeExplainer:
-    """One explainer per mode, built lazily.
-
-    force_offline=True (the default UI mode) never imports google-genai or touches
-    the network, so the first render is instant. Only when the user opts into live
-    phrasing do we load a .env and construct a live client.
-    """
+    """One explainer per mode, built lazily. Offline never imports google-genai."""
     if not force_offline:
         _load_dotenv_if_present()
     return VibeExplainer(force_offline=force_offline)
 
 
 @st.cache_data(show_spinner=False)
-def _compute(genre: str, mood: str, energy: float, k: int,
-             one_per_genre: bool, use_live: bool) -> tuple[list[dict], str]:
-    """Recommend -> (optionally diversify) -> retrieve -> explain, cached.
+def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
+             rag_on: bool, use_live: bool, one_per_genre: bool) -> tuple[list[dict], str, int]:
+    """Run one fully-configured pipeline; cached on its plain inputs.
 
-    Cached on the plain, hashable inputs so re-selecting the same query returns
-    instantly instead of recomputing (and, in live mode, re-calling the API).
-    Returns (results, explainer_mode). Mirrors src/explain.py plus the optional
-    genre-diversity selection; the ranking is still the deterministic recipe and the
-    explainer only adds prose.
+    Returns (results, explainer_mode, catalog_size). When rag_on is False we skip
+    retrieval/generation entirely and return the raw recommender output (the
+    original Module 3 behavior: score + rule-based reasons only).
     """
-    songs = _load_catalog()
-    notes = _load_corpus()
-    client = _get_explainer(force_offline=not use_live)
-
+    songs = _load_catalog(catalog_key)
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
 
-    # Ask for a generous pool so the diversity cap has room to backfill across genres.
     pool = recommend_songs(prefs, songs, k=max(k, len(songs)))
     chosen = diversify(pool, k=k, max_per_genre=1) if one_per_genre else pool[:k]
 
+    if not rag_on:
+        results = [{
+            "title": s["title"], "artist": s["artist"], "genre": s["genre"],
+            "score": sc, "reasons": r, "explanation": None,
+        } for s, sc, r in chosen]
+        return results, "score-only", len(songs)
+
+    notes = _load_corpus()
+    client = _get_explainer(force_offline=not use_live)
     results = []
     for song, score, reasons in chosen:
         note, confidence, note_title = retrieve_note(song, notes)
-        explanation = client.explain(song, score, reasons, note, prefs)
         results.append({
             "title": song["title"], "artist": song["artist"], "genre": song["genre"],
-            "score": score, "reasons": reasons, "confidence": confidence,
-            "grounded": note is not None, "note_title": note_title,
-            "explanation": explanation,
+            "score": score, "reasons": reasons, "explanation": client.explain(
+                song, score, reasons, note, prefs),
+            "confidence": confidence, "grounded": note is not None,
+            "note_title": note_title,
         })
-    return results, client.mode
+    return results, client.mode, len(songs)
+
+
+# ----------------------------------------------------------------------------
+# Rendering
+# ----------------------------------------------------------------------------
+
+def _render_results(results: list[dict]) -> None:
+    """Render a list of result cards (with or without RAG explanations)."""
+    if not results:
+        st.warning("No songs to show.")
+        return
+    for rank, r in enumerate(results, start=1):
+        with st.container(border=True):
+            head = st.columns([0.7, 0.3])
+            head[0].markdown(f"**{rank}. {r['title']}** — {r['artist']}")
+            head[1].markdown(f"score **{r['score']:.2f}**")
+            st.caption("  ".join(f"`{reason}`" for reason in r["reasons"]))
+            # RAG mode carries an explanation; score-only mode does not.
+            if r.get("explanation"):
+                st.write(f"_{r['explanation']}_")
+                if r.get("grounded"):
+                    st.caption(
+                        f"grounded on note '{r['note_title']}' "
+                        f"(retrieval confidence {r['confidence']:.2f})"
+                    )
+                else:
+                    st.caption("no note retrieved — score-only fallback (guardrail)")
+
+
+def _config_summary(cfg: dict, mode: str) -> str:
+    """Short human-readable label for a side's configuration."""
+    parts = ["RAG" if cfg["rag_on"] else "Score-only", cfg["catalog_key"]]
+    if cfg["rag_on"]:
+        parts.append("Live" if mode == "live" else "Offline")
+    if cfg["one_per_genre"]:
+        parts.append("Genre variety")
+    return "  ·  ".join(parts)
+
+
+def _side_controls(label: str, catalog_keys: list[str], key_prefix: str) -> dict:
+    """Render one side's independent pipeline controls; return its config dict."""
+    st.markdown(f"**{label}**")
+    catalog_key = st.selectbox("Catalog", catalog_keys, key=f"{key_prefix}_cat")
+    rag_on = st.checkbox("RAG explanations", value=True, key=f"{key_prefix}_rag",
+                         help="On: grounded natural-language 'why'. Off: original "
+                              "score-only rule reasons (Module 3 behavior).")
+    use_live = st.checkbox("Live AI phrasing", value=False, key=f"{key_prefix}_live",
+                           disabled=not rag_on,
+                           help="Only when RAG is on. Uses Gemini (needs a key; slower).")
+    one_per_genre = st.checkbox("Genre variety", value=False, key=f"{key_prefix}_div",
+                                help="Mix up the results so you don't get several "
+                                     "songs from the same genre.")
+    return {"catalog_key": catalog_key, "rag_on": rag_on,
+            "use_live": use_live, "one_per_genre": one_per_genre}
 
 
 # CSS to match Kim's portfolio (Blush + Lavender, IBM Plex fonts, soft gradient).
-# Base colors come from .streamlit/config.toml; this adds the web fonts, the gradient
-# background, and chip/card polish that config alone cannot express.
 _PORTFOLIO_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap');
@@ -109,19 +169,16 @@ _PORTFOLIO_CSS = """
   --border:#F3D6DE; --rose:#D97A8C; --rose-soft:#FBDCE3; --sage:#B08FB5;
 }
 
-/* Body font: IBM Plex Sans everywhere. */
 html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"],
 .stMarkdown, p, div, span, label, input, button, select, textarea {
   font-family: 'IBM Plex Sans', sans-serif;
 }
-/* Display font: IBM Plex Serif for headings, in deep-plum ink. */
 h1, h2, h3, h4 {
   font-family: 'IBM Plex Serif', serif !important;
   color: var(--ink); letter-spacing: -0.01em;
 }
 h1 { font-weight: 600; }
 
-/* Blush page with the portfolio's soft radial gradients. */
 [data-testid="stAppViewContainer"] {
   background-color: var(--cream);
   background-image:
@@ -130,20 +187,16 @@ h1 { font-weight: 600; }
   background-attachment: fixed;
 }
 
-/* Reason tags render as inline <code>; style them as well-defined rose pills.
-   A visible rose border + darker rose text gives the chip a clear edge against
-   the near-white card, and stronger text weight makes them easy to read. */
 code {
-  background: #F7D0D9 !important;          /* soft rose, a touch deeper than the tint */
-  color: #3A1F33 !important;               /* deep-plum ink -- maximum contrast */
-  border: 1px solid #D97A8C !important;    /* full dusty-rose -- clearly defined edge */
+  background: #F7D0D9 !important;
+  color: #3A1F33 !important;
+  border: 1px solid #D97A8C !important;
   border-radius: 999px; padding: 2px 11px;
   font-size: 0.82rem; font-weight: 600;
   font-family: 'IBM Plex Sans', sans-serif !important;
   white-space: nowrap;
 }
 
-/* Recommendation cards: paper surface, soft rose hairline, rounded. */
 [data-testid="stVerticalBlockBorderWrapper"] {
   background: var(--paper);
   border: 1px solid var(--border) !important;
@@ -151,14 +204,12 @@ code {
   box-shadow: 0 1px 3px rgba(58,31,51,0.04);
 }
 
-/* Rose primary button. */
 [data-testid="stFormSubmitButton"] button {
   background: var(--rose); color: #fff; border: none; border-radius: 10px;
   font-weight: 500;
 }
 [data-testid="stFormSubmitButton"] button:hover { background: #cf6b7e; color:#fff; }
 
-/* Info banner styled to match the "Find songs" button: rose fill, white text. */
 [data-testid="stAlert"] {
   background: var(--rose) !important; border-radius: 10px; border: none;
 }
@@ -170,22 +221,24 @@ code {
 
 
 def main() -> None:
-    # Wide layout so the app uses the full window and scales with the screen; the
-    # content is then held in a responsive centered column below.
     st.set_page_config(page_title="VibeFinder", layout="wide")
     st.markdown(_PORTFOLIO_CSS, unsafe_allow_html=True)
 
-    songs = _load_catalog()
-    genres = sorted({s["genre"] for s in songs})
-    moods = sorted({s["mood"] for s in songs})
+    # A representative catalog just to populate the genre/mood dropdowns.
+    ref_songs = _load_catalog("Expanded (46)")
+    genres = sorted({s["genre"] for s in ref_songs})
+    moods = sorted({s["mood"] for s in ref_songs})
 
-    # --- Sidebar controls -------------------------------------------------
-    # Everything lives inside a FORM, so changing a dropdown or slider does NOT
-    # recompute -- the app only re-runs when the user clicks "Find songs". This
-    # keeps it from re-querying (and, in live mode, re-calling the API) on every keystroke.
+    # View mode lives OUTSIDE the form so switching it re-renders the controls
+    # immediately; everything else is inside a form so it only runs on submit.
     with st.sidebar:
-        st.header("Your taste profile")
-        with st.form("profile_form"):
+        st.header("VibeFinder")
+        view = st.radio("View", ["Single", "Compare"], horizontal=True,
+                        help="Single: the finished system. Compare: build two "
+                             "pipelines and see them side by side.")
+
+        with st.form("controls"):
+            st.subheader("Taste profile")
             genre = st.selectbox("Favorite genre", genres,
                                  index=genres.index("pop") if "pop" in genres else 0)
             mood = st.selectbox("Favorite mood", moods,
@@ -193,60 +246,64 @@ def main() -> None:
             energy = st.slider("Target energy", 0.0, 1.0, 0.80, 0.05,
                                help="0.0 = very calm, 1.0 = very energetic")
             k = st.slider("How many songs", 1, 10, 5)
-            one_per_genre = st.checkbox(
-                "Genre variety (one per genre)",
-                value=False,
-                help="Mix up the results so you don't get several songs from the same "
-                     "genre. You'll trade a little taste-match for more variety.",
-            )
-            use_live = st.checkbox(
-                "Use live AI phrasing (slower)",
-                value=False,
-                help="Off: instant, deterministic offline explanations. On: Gemini "
-                     "phrases each explanation (needs GEMINI_API_KEY; one API call per "
-                     "song, and subject to rate limits).",
-            )
-            # No rerun happens until this is clicked; on first load it renders with
-            # the defaults above and shows a default set of recommendations.
-            st.form_submit_button("Find songs", use_container_width=True, type="primary")
 
-    # --- Main content, held in a responsive centered column ---------------
-    # The middle column carries the content; the side spacers keep line length
-    # comfortable on very wide screens while everything still scales with the window.
-    left, center, right = st.columns([1, 4, 1])
-    with center:
-        st.title("VibeFinder")
-        st.caption(
-            "A content-based music recommender with grounded, plain-language "
-            "explanations. Pick a taste profile and see what fits your vibe, and why."
-        )
+            if view == "Single":
+                st.divider()
+                single_rag = True
+                single_live = st.checkbox("Use live AI phrasing (slower)", value=False,
+                                          help="Off: instant offline explanations. On: "
+                                               "Gemini phrases each one (needs a key).")
+                single_div = st.checkbox("Genre variety (one per genre)", value=False,
+                                         help="Mix up the results so you don't get "
+                                              "several songs from the same genre.")
+                cfg_a = cfg_b = None
+            else:
+                st.divider()
+                st.caption("Configure each side independently:")
+                cfg_a = _side_controls("Side A", list(CATALOGS.keys()), "a")
+                st.divider()
+                cfg_b = _side_controls("Side B", list(CATALOGS.keys()), "b")
+                single_rag = single_live = single_div = None
 
+            submitted = st.form_submit_button(
+                "Compare" if view == "Compare" else "Find songs",
+                use_container_width=True, type="primary")
+
+    # --- Main content -----------------------------------------------------
+    st.title("VibeFinder")
+    st.caption(
+        "A content-based music recommender with grounded, plain-language "
+        "explanations. Build a taste profile and see what fits your vibe, and why."
+    )
+    st.subheader(f"{genre} / {mood} / energy {energy:.2f}")
+
+    if view == "Single":
         with st.spinner("Finding your vibe..."):
-            results, mode = _compute(genre, mood, energy, k, one_per_genre, use_live)
-
+            results, mode, size = _compute(genre, mood, energy, k, "Expanded (46)",
+                                           single_rag, single_live, single_div)
         mode_label = "Live (Gemini)" if mode == "live" else "Offline (deterministic)"
-        st.info(f"Explainer mode: **{mode_label}**  |  catalog: {len(songs)} songs")
+        st.info(f"Explainer mode: **{mode_label}**  |  catalog: {size} songs")
+        left, center, right = st.columns([1, 4, 1])
+        with center:
+            _render_results(results)
+        return
 
-        st.subheader(f"Recommendations for {genre} / {mood} / energy {energy:.2f}")
+    # Compare view: two independently-configured pipelines, same profile.
+    with st.spinner("Running both pipelines..."):
+        res_a, mode_a, size_a = _compute(genre, mood, energy, k,
+                                         cfg_a["catalog_key"], cfg_a["rag_on"],
+                                         cfg_a["use_live"], cfg_a["one_per_genre"])
+        res_b, mode_b, size_b = _compute(genre, mood, energy, k,
+                                         cfg_b["catalog_key"], cfg_b["rag_on"],
+                                         cfg_b["use_live"], cfg_b["one_per_genre"])
 
-        if not results:
-            st.warning("No songs to show.")
-            return
-
-        for rank, r in enumerate(results, start=1):
-            with st.container(border=True):
-                head = st.columns([0.72, 0.28])
-                head[0].markdown(f"**{rank}. {r['title']}** — {r['artist']}")
-                head[1].markdown(f"score **{r['score']:.2f}**")
-                st.caption("  ".join(f"`{reason}`" for reason in r["reasons"]))
-                st.write(f"_{r['explanation']}_")
-                if r["grounded"]:
-                    st.caption(
-                        f"grounded on note '{r['note_title']}' "
-                        f"(retrieval confidence {r['confidence']:.2f})"
-                    )
-                else:
-                    st.caption("no note retrieved — score-only fallback (guardrail)")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.info(_config_summary(cfg_a, mode_a) + f"  ·  {size_a} songs")
+        _render_results(res_a)
+    with col_b:
+        st.info(_config_summary(cfg_b, mode_b) + f"  ·  {size_b} songs")
+        _render_results(res_b)
 
 
 if __name__ == "__main__":

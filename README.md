@@ -104,6 +104,16 @@ streamlit run app.py
 Like the CLI, it runs offline by default and uses live Gemini automatically if a key
 is present (shell env var or a local `.env`). A mode banner shows which is active.
 
+It has two views. **Single** runs the finished system. **Compare** is a build-your-own
+A/B lab: the same taste profile is run through two independently-configured pipelines
+side by side -- each side toggles the catalog (Original 20 vs Expanded 46), RAG on/off
+(grounded explanations vs original score-only reasons), live vs offline phrasing, and
+genre variety. It makes the effect of each Project 5 change visible at a glance (for
+example, a `metal / intense` profile has no real match on the 20-song catalog but a
+full 3.95 match on the 46-song one). The comparison is authentic, not mocked: the
+score-only path is the untouched Module 3 recommender and the 20-song catalog is the
+original data from git history.
+
 ## Sample Interactions (RAG output, captured from `python -m src.main`)
 
 Full captured run: [`assets/sample_run.txt`](assets/sample_run.txt).
