@@ -147,8 +147,8 @@ def _side_controls(label: str, catalog_keys: list[str], key_prefix: str) -> dict
     st.markdown(f"**{label}**")
     catalog_key = st.selectbox("Catalog", catalog_keys, key=f"{key_prefix}_cat")
     rag_on = st.checkbox("RAG explanations", value=True, key=f"{key_prefix}_rag",
-                         help="On: grounded natural-language 'why'. Off: original "
-                              "score-only rule reasons (Module 3 behavior).")
+                         help="On: grounded natural-language 'why'. Off: the original "
+                              "score-only rule reasons.")
     use_live = st.checkbox("Live AI phrasing", value=False, key=f"{key_prefix}_live",
                            disabled=not rag_on,
                            help="Only when RAG is on. Uses Gemini (needs a key; slower).")
