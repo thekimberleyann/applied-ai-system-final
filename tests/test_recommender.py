@@ -78,9 +78,9 @@ def small_catalog() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def test_real_csv_loads_twenty_rows():
-    """The shipped catalog must load exactly 20 well-formed songs."""
+    """The shipped catalog must load exactly 46 well-formed songs."""
     songs = load_songs(REAL_CSV)
-    assert len(songs) == 20
+    assert len(songs) == 46
     # Spot-check the casting and normalization contract on the first row.
     first = songs[0]
     assert isinstance(first["energy"], float)

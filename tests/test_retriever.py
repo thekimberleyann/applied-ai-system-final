@@ -36,7 +36,7 @@ def test_corpus_has_a_note_for_every_song():
     """Every song in the catalog must have a note, keyed by its exact title."""
     songs = load_songs(REAL_CSV)
     notes = load_notes(REAL_NOTES)
-    assert len(notes) == len(songs) == 20
+    assert len(notes) == len(songs) == 46
     for song in songs:
         assert song["title"] in notes, f"missing note for {song['title']!r}"
         assert notes[song["title"]].strip(), "note body should not be empty"
@@ -57,7 +57,7 @@ def test_song_retrieves_its_own_note_with_high_confidence():
 
 
 def test_every_catalog_song_is_grounded():
-    """All 20 real songs clear the confidence floor and get a grounded note."""
+    """All 46 real songs clear the confidence floor and get a grounded note."""
     songs = load_songs(REAL_CSV)
     notes = load_notes(REAL_NOTES)
     for song in songs:

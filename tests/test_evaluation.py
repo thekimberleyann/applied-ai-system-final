@@ -58,16 +58,21 @@ def test_ghost_genre_kills_the_genre_term(songs):
 
 def test_conflicted_profile_still_ranks_categorical_match_first(songs):
     """"Conflicted" (blues/sad but high target energy) does NOT flip the ranking:
-    the unique genre+mood match (Rainy Day Blues) wins by a wide margin despite a
-    0.55 energy miss. This is the categorical-dominance finding -- energy is a weak
-    tiebreaker whenever a unique genre+mood match exists."""
+    a blues+sad categorical match wins despite the ~0.55 energy miss. On the 46-song
+    catalog there are now TWO blues/sad songs, so both dominate on the +3.0
+    categorical floor and the energy term only breaks the tie BETWEEN them: Rainy
+    Day Blues (energy 0.40) edges Delta Dust (energy 0.38) by 0.02. The categorical-
+    dominance finding holds -- energy stays a weak tiebreaker among categorical
+    matches, and non-matches sit far below."""
     conflicted = {"favorite_genre": "blues", "favorite_mood": "sad", "target_energy": 0.95}
     results = recommend_songs(conflicted, songs, k=5)
-    top_song, top_score, _ = results[0]
-    assert top_song["title"] == "Rainy Day Blues"
-    assert top_score == pytest.approx(3.45)  # 2.0 + 1.0 + round(1 - 0.55, 2)
-    # The runner-up scores on energy alone, far below the categorical match.
-    assert results[1][1] < 1.5
+    assert results[0][0]["title"] == "Rainy Day Blues"
+    assert results[0][1] == pytest.approx(3.45)  # 2.0 + 1.0 + round(1 - 0.55, 2)
+    # The runner-up is the OTHER blues/sad song, just 0.02 behind on energy.
+    assert results[1][0]["title"] == "Delta Dust"
+    assert results[1][1] == pytest.approx(3.43)  # 2.0 + 1.0 + round(1 - 0.57, 2)
+    # The next song matches genre OR mood but not both, so it drops well below.
+    assert results[2][1] < 2.6
 
 
 # ---------------------------------------------------------------------------
@@ -83,16 +88,21 @@ def test_popularity_never_dethrones_the_categorical_number_one(songs):
 
 
 def test_popularity_buries_niche_and_lifts_hits_at_weight_two(songs):
-    """At weight 2.0, two pop hits that share neither genre nor mood with a folk
-    fan invade the top-5, and two genuine near-matches drop out."""
+    """At weight 2.0, a high-popularity pop hit that shares neither genre nor mood
+    with a folk fan invades the top-5, and a genuine niche near-match drops out.
+
+    On the 46-song catalog the folk/nostalgic top-5 is deeper (Wandering Roads plus
+    Paper Lanterns, Backroad Sunset, Golden Hour, Rainy Day Blues), so exactly one
+    slot flips: Summer Anthem (popularity 0.95) climbs in and Rainy Day Blues
+    (popularity 0.25) is buried. The bias is milder but the same in kind."""
     pure_names = [s["title"] for (s, _sc, _r) in recommend_songs(FOLK_PROFILE, songs, k=5)]
     pop_names = [s["title"] for (s, _t, _p) in rank_with_popularity(FOLK_PROFILE, songs, 2.0, k=5)]
 
     lifted = [n for n in pop_names if n not in pure_names]
     buried = [n for n in pure_names if n not in pop_names]
 
-    assert set(lifted) == {"Summer Anthem", "Sunshine Pop"}
-    assert set(buried) == {"Rainy Day Blues", "Acoustic Morning"}
+    assert set(lifted) == {"Summer Anthem"}
+    assert set(buried) == {"Rainy Day Blues"}
 
 
 def test_experiment_does_not_touch_the_pure_recipe(songs):

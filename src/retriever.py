@@ -159,21 +159,35 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     the corpus's iteration order, which is deterministic for a normal dict.
     """
     query_tokens = _tokenize(_query_for_song(song))
+    song_title = str(song.get("title", ""))
 
     best_title: str | None = None
     best_note: str | None = None
-    best_score = 0.0
+    best_conf = 0.0
+    # Selection uses a two-part key: (exact-title-match, body-overlap). The exact
+    # flag guarantees a song's OWN note wins even when a same-genre+mood sibling's
+    # body scores higher on token overlap (e.g. Heavy Riff vs Concrete Anthem, both
+    # rock/intense, where Concrete Anthem's note contains the word "heavy"). The
+    # body-overlap alone would mis-retrieve there; the exact flag fixes it WITHOUT
+    # saturating the confidence -- we still report the body overlap as the
+    # confidence, so it stays a varied, meaningful signal rather than always 1.0.
+    best_key = (0, 0.0)
 
     for title, note in notes.items():
-        score = _similarity(query_tokens, _tokenize(note))
-        if score > best_score:
-            best_score = score
+        body_overlap = _similarity(query_tokens, _tokenize(note))
+        exact = 1 if title == song_title else 0
+        key = (exact, body_overlap)
+        if key > best_key:
+            best_key = key
+            best_conf = body_overlap
             best_title = title
             best_note = note
 
-    best_score = round(best_score, 2)
+    best_conf = round(best_conf, 2)
     # Enforce the confidence floor: below it we report NO usable note (the caller
     # will fall back), but we still return the score we saw so it can be logged.
-    if best_note is None or best_score < MIN_CONFIDENCE:
-        return (None, best_score, None)
-    return (best_note, best_score, best_title)
+    # An off-catalog song has no exact-title match and typically low body overlap,
+    # so it falls here to the guardrail path.
+    if best_note is None or best_conf < MIN_CONFIDENCE:
+        return (None, best_conf, None)
+    return (best_note, best_conf, best_title)

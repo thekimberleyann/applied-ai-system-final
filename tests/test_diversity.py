@@ -2,7 +2,8 @@
 
 These lock down the documented behavior of the post-ranking genre cap:
   * the exact default-profile BEFORE/AFTER at cap 1,
-  * the "cap 2 is dead code" finding, pinned as an executable fact,
+  * the size insight: cap 2 was dead code on the 20-song catalog but FIRES on the
+    46-song catalog (catalog size, not the algorithm, gated its usefulness),
   * the sacred pass-through of scores and reasons (same objects, same values),
   * that neither the input list nor the song dicts are ever mutated,
   * the empty-result edge cases (empty ranked, k<=0, max_per_genre<=0),
@@ -45,38 +46,53 @@ def _fake_ranked() -> list:
 def test_default_profile_before_after_cap_one():
     """The exact verified BEFORE/AFTER for pop/happy/0.80 at max_per_genre=1.
 
-    Baseline top-5 keeps both pop hits; the cap-1 diversified list demotes the
-    second pop hit (Sunshine Pop, 3.95) and backfills Dance All Night (0.90)."""
+    On the 46-song catalog the baseline top-5 holds THREE pop songs (Summer Anthem
+    4.00, Sunshine Pop 3.95, Confetti Skies 3.92) plus two disco songs. The cap-1
+    diversified list keeps only the top pop song and backfills across genres."""
     songs = load_songs(REAL_CSV)
     baseline, diversified = diversity_report(DEFAULT_PROFILE, songs, k=5, max_per_genre=1)
 
     assert [s["title"] for (s, _sc, _r) in baseline] == [
         "Summer Anthem",
         "Sunshine Pop",
-        "Midnight Drive",
-        "Crown Season",
-        "Power Up",
+        "Confetti Skies",
+        "Velvet Hustle",
+        "Mirrorball Fever",
     ]
     assert [s["title"] for (s, _sc, _r) in diversified] == [
         "Summer Anthem",
+        "Velvet Hustle",
         "Midnight Drive",
         "Crown Season",
-        "Power Up",
-        "Dance All Night",
+        "Static Rebellion",
     ]
 
 
-def test_cap_two_is_a_no_op_on_this_catalog():
-    """max_per_genre=2 is DEAD CODE here: no top-5 ever holds 3 of one genre, so
-    the diversified top-5 is byte-for-byte the baseline top-5. Pinned so a future
-    change that made cap-2 suddenly matter would fail loudly."""
+def test_cap_two_now_fires_on_expanded_catalog():
+    """The SIZE INSIGHT: max_per_genre=2 was dead code on the original 20-song
+    catalog (no top-5 ever held 3 of one genre) but FIRES on the 46-song catalog.
+
+    For pop/happy/0.80 the baseline top-5 now holds three pop songs, so a cap of 2
+    changes the result: it drops the third pop song (Confetti Skies) and backfills.
+    This proves the diversity cap's usefulness was gated by catalog SIZE, not by the
+    algorithm -- exactly the point the model card now makes."""
     songs = load_songs(REAL_CSV)
-    baseline = recommend_songs(DEFAULT_PROFILE, songs, k=5)
+    baseline = [s["title"] for (s, _sc, _r) in recommend_songs(DEFAULT_PROFILE, songs, k=5)]
     _b, diversified = diversity_report(DEFAULT_PROFILE, songs, k=5, max_per_genre=2)
+    div_titles = [s["title"] for (s, _sc, _r) in diversified]
 
-    assert [s["title"] for (s, _sc, _r) in baseline] == [
-        s["title"] for (s, _sc, _r) in diversified
+    # Cap 2 is no longer a no-op: the diversified top-5 differs from the baseline.
+    assert div_titles != baseline
+    # Specifically, the third pop song is dropped and the list is backfilled.
+    assert baseline.count("Confetti Skies") == 1  # present in the raw baseline
+    assert div_titles == [
+        "Summer Anthem",
+        "Sunshine Pop",
+        "Velvet Hustle",
+        "Mirrorball Fever",
+        "Midnight Drive",
     ]
+    assert "Confetti Skies" not in div_titles  # the 3rd pop was capped out
 
 
 # ---------------------------------------------------------------------------
