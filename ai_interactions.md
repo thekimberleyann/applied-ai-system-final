@@ -215,6 +215,11 @@ showed that diversity answers a different question than the one VibeFinder was
 built to answer. The shipped recommender answers "what fits my vibe"; this side-car answers
 "give me a spread of genres." Different question, different module.
 
+> Note (added later): this entry records the diversity work on the ORIGINAL 20-song
+> catalog. The Project 5 catalog expansion (entry 10) changed two of these numbers --
+> the cap-2 "dead code" finding no longer holds (it fires on 46 songs) and the cap-1
+> cost is now ~1.95 points, not 3.05. Kept as-is for the honest history; see entry 10.
+
 ---
 
 ## 9. Project 5: the RAG explanation layer (helpful design, flawed code)
@@ -247,3 +252,38 @@ captured run in `assets/sample_run.txt` before trusting it.
 **Decision:** Kept the offline-stub design and the corrected sentence handling. The
 episode is the clearest example in this project of "it runs" not meaning "it is
 right," and of me checking the AI's output against reality.
+
+---
+
+## 10. Project 5: expanding the catalog to fix its own limitations
+
+**What I asked:** My model card documented two data biases -- a pop/high-energy
+composition skew and four moods (dreamy, intense, mellow, sad) with a single song
+each. Rather than just describe them, I asked an AI to design a catalog expansion
+that fixes them, grounded in the categorization research (GTZAN genres, common mood
+vocabulary, Spotify-style energy values).
+
+**What the AI produced:** A proposal of 26 new songs (46 total) that rebalances
+every genre to 2-3 songs, adds disco to complete all 10 GTZAN genres, gives every
+mood at least 3 songs, widens the energy spread, and keeps ~11 niche low-popularity
+strong-matches for the popularity experiment. It also produced a matching factual
+note for each new song and a before/after balance table, and it flagged the
+downstream files the change would break.
+
+**My verification and decision:** I did not take the data as-is. Two catches: (1) the
+proposed pop/happy song "Confetti Skies" had energy 0.80, identical to my default
+profile, which would tie Summer Anthem at 4.00 and destroy my signature "Summer
+Anthem edges Sunshine Pop by 0.05" example -- I nudged it to 0.72 to preserve that.
+(2) The bigger catalog exposed a real retrieval bug: "Heavy Riff" started retrieving
+"Concrete Anthem"'s note because both are rock/intense and Concrete Anthem's note
+contains the word "heavy." I fixed the retriever to guarantee a song's own note wins
+(exact-title tiebreaker) while still reporting body-overlap as a varied confidence. I
+re-derived every affected test against the real output rather than guessing, and the
+suite stayed green at 62.
+
+**Decision:** Integrated. Importantly, the expansion SUPERSEDED the earlier
+"cap of 2 is dead code" finding from entry 8: on 46 songs the default top-5 holds
+three pop songs, so a cap of 2 now fires. I reframed that across the docs as a size
+insight -- the diversity knob's usefulness was gated by catalog size, not by the
+algorithm -- and updated the test to pin the new behavior. The catalog biases the
+model card used to merely describe are now actually fixed.

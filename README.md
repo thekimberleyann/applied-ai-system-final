@@ -112,7 +112,8 @@ match on all three terms; the explanation is grounded in each song's note:
 ```
 
 **Example 2 -- Chill Lofi (lofi / chill / energy 0.30).** A different corner of taste
-space; note how a partial match (mood + energy only) is explained honestly:
+space; note how the two partial matches below are explained honestly -- #2 matches
+genre but not mood, #3 matches mood but not genre:
 
 ```
 === Chill Lofi (lofi / chill / energy 0.30) [RAG] ===
@@ -122,11 +123,16 @@ space; note how a partial match (mood + energy only) is explained honestly:
      - energy close to target (+1.00)
      why: Lofi Rain: A calm lofi beat by Study Cat, low energy at 0.30 and a slow 72 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
           [grounded on 'Lofi Rain', confidence 0.67]
-2. Island Time  (score 1.75)
+2. Study Fog  (score 2.98)
+     - genre match (+2.0)
+     - energy close to target (+0.98)
+     why: Study Fog: A lofi track built for the background, mellow and low-key at 0.28 energy over a slow 74 BPM. It matched on your favorite genre, and your target energy.
+          [grounded on 'Study Fog', confidence 0.50]
+3. Underwater Bloom  (score 1.90)
      - mood match (+1.0)
-     - energy close to target (+0.75)
-     why: Island Time: A reggae song by Palm Groove, mid energy at 0.55 and a loose 76 BPM. It matched on the mood you asked for, and your target energy.
-          [grounded on 'Island Time', confidence 0.50]
+     - energy close to target (+0.90)
+     why: Underwater Bloom: A dreampop track with a chill mood, gentle at 0.40 energy and a 100 BPM drift. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Underwater Bloom', confidence 0.50]
 ```
 
 **Example 3 -- the guardrail firing (song with no note).** When retrieval finds no
@@ -145,7 +151,7 @@ The RAG run ends with a reliability summary, and the test suite pins the guarant
 
 ```
 ### RELIABILITY SUMMARY (RAG layer) ###
-10/10 explained recommendations were grounded on a retrieved note; average retrieval confidence 0.69; explainer mode = offline.
+10/10 explained recommendations were grounded on a retrieved note; average retrieval confidence 0.58; explainer mode = offline.
 Guardrail: any recommendation with no note above the confidence floor falls back to a score-only explanation instead of inventing details.
 ```
 
@@ -188,7 +194,7 @@ tracks, not an ad-hoc choice:
 - **Genre** follows the standard "one label from a bounded list" pattern. The canonical
   MIR benchmark, the GTZAN genre collection, uses a fixed set of 10 genres (blues,
   classical, country, disco, hip-hop, jazz, metal, pop, reggae, rock); this catalog
-  uses 9 of those 10 plus a few adjacent labels.
+  covers all 10 plus a few adjacent labels (synthwave, lofi, edm, r&b, and others).
 - **Energy** (0.0-1.0) matches Spotify's `energy` audio feature exactly in both concept
   ("perceptual intensity and activity") and scale, so this dimension mirrors a
   production system rather than inventing a metric.
@@ -406,19 +412,23 @@ the measured results and any surprises are reported.
 
 **Biases from the catalog (the data)**
 
-- **Composition skew.** The 20 songs are not evenly balanced -- they skew toward
-  pop and high-energy tracks, and one cluster of electronic-family genres
-  (synthwave, edm, electronic, dreampop) makes up about 20% of the catalog. We
-  expect popular, high-energy profiles to get richer and more varied results than
-  niche profiles simply because there are more songs to match. Phase 4 will
-  compare result quality across different profile types. (Note this is a property
-  of the data, not the recipe: the energy term still rewards closeness to your
-  target, not high energy.)
-- **Thin-mood coverage.** Four moods appear on only one song each: dreamy,
-  intense, mellow, and sad. For a profile asking for one of those moods there is
-  almost nothing to match on, so the mood term can fire at most once and the
-  ranking falls back to genre and energy. Phase 4 will check which mood profiles
-  collapse to genre-plus-energy in practice.
+> Note: the two data biases below described the ORIGINAL 20-song catalog. Project 5
+> expanded the catalog to 46 songs, rebalancing genres (every genre now has 2-3
+> songs, all 10 GTZAN genres covered) and giving every mood at least 3 songs. Both
+> data biases are therefore largely resolved; they are kept here as the baseline the
+> expansion addressed.
+
+- **Composition skew (original catalog).** The original 20 songs were not evenly
+  balanced -- they skewed toward pop and high-energy tracks. We expected popular,
+  high-energy profiles to get richer results than niche profiles simply because
+  there were more songs to match. (Note this is a property of the data, not the
+  recipe: the energy term still rewards closeness to your target, not high energy.)
+  The 46-song catalog spreads genres and energy more evenly, so this skew is largely
+  corrected.
+- **Thin-mood coverage (original catalog).** In the original 20 songs, four moods
+  appeared on only one song each: dreamy, intense, mellow, and sad. A profile asking
+  for one of those had almost nothing to match on. The expansion gives every mood at
+  least 3 songs, so this thin coverage is resolved.
 
 ## Run it
 
@@ -435,12 +445,12 @@ python -m src.main
 ## Sample Recommendation Output (core recipe, score-only)
 
 The default profile (genre pop, mood happy, target energy 0.8) produces this ranking.
-Note how the two pop/happy songs tie on genre and mood, so the energy-closeness term
-alone decides that Summer Anthem (energy 0.80, right on the target) edges out Sunshine
-Pop (energy 0.85):
+Three pop/happy songs tie on genre and mood, so the energy-closeness term alone orders
+them: Summer Anthem (energy 0.80, right on the target) edges out Sunshine Pop (0.85)
+and Confetti Skies (0.72):
 
 ```
-Loaded songs: 20
+Loaded songs: 46
 
 === Recommendations for the default profile (pop / happy) ===
 1. Summer Anthem  (score 4.00)
@@ -451,18 +461,22 @@ Loaded songs: 20
      - genre match (+2.0)
      - mood match (+1.0)
      - energy close to target (+0.95)
-3. Midnight Drive  (score 0.95)
-     - energy close to target (+0.95)
-4. Crown Season  (score 0.95)
-     - energy close to target (+0.95)
-5. Power Up  (score 0.92)
+3. Confetti Skies  (score 3.92)
+     - genre match (+2.0)
+     - mood match (+1.0)
      - energy close to target (+0.92)
+4. Velvet Hustle  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+5. Mirrorball Fever  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
 ```
 
-Songs 3 to 5 match neither genre nor mood, so their whole score is the energy
-term. This is the genre-dominance effect described under Expected Biases: any
-pop/happy match jumps far ahead of songs that only happen to sit near the target
-energy.
+The three pop/happy songs (each 3.9+) sit far ahead of songs 4 to 5, which are
+disco/happy tracks matching the mood but not the genre (so no +2.0 term). This is
+the genre-dominance effect described under Expected Biases: any full genre+mood match
+jumps far ahead of a mood-only or energy-only match.
 
 ## Optional Extension: Genre Diversity Re-Ranking
 
@@ -499,29 +513,30 @@ python -m src.diversity
 ```
 #  BEFORE (pure recipe)              AFTER (one per genre)
 1  Summer Anthem [pop] 4.00          Summer Anthem [pop] 4.00
-2  Sunshine Pop [pop] 3.95           Midnight Drive [synthwave] 0.95
-3  Midnight Drive [synthwave] 0.95   Crown Season [hip-hop] 0.95
-4  Crown Season [hip-hop] 0.95       Power Up [electronic] 0.92
-5  Power Up [electronic] 0.92        Dance All Night [edm] 0.90
+2  Sunshine Pop [pop] 3.95           Velvet Hustle [disco] 2.00
+3  Confetti Skies [pop] 3.92         Midnight Drive [synthwave] 0.95
+4  Velvet Hustle [disco] 2.00        Crown Season [hip-hop] 0.95
+5  Mirrorball Fever [disco] 1.95     Static Rebellion [rock] 0.95
 ```
 
 **Two honest findings.** Both argue for keeping the extension out of the shipped
 recipe.
 
-- **A cap of 2 is dead code on this catalog.** There are 20 songs with at most 2
-  of any one genre (pop x2, hip-hop x2, everything else x1), and across all 231
-  (genre, mood, energy) profiles no top-5 ever contains 3 songs of a single
-  genre. A cap of 2 can therefore never fire; only a cap of 1 changes anything,
-  which is why 1 is the default. This echoes the earlier popularity tie-breaker
-  that was rejected for the same reason: a knob that almost never fires is not
-  worth shipping.
-- **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop, a
-  genuine 3.95 pop/happy match, and promotes Dance All Night at 0.90 -- an edm
-  song that matches NEITHER the listener's genre NOR their mood. That is a
-  3.05-point quality cost for one slot of genre breadth. It does curb the
-  genre-dominance bias, but it spends the listener's stated taste on variety they
-  did not ask for. That trade is why the shipped `recommend_songs` is left
-  unchanged and diversity stays a separate, optional module.
+- **A cap of 2 was dead code on the original catalog, and the catalog SIZE is what
+  changed that.** On the original 20-song catalog every genre had at most 2 songs, so
+  across all 231 (genre, mood, energy) profiles no top-5 ever held 3 of one genre and
+  a cap of 2 could never fire -- it was dead code, and only a cap of 1 did anything.
+  After Project 5 expanded the catalog to 46 songs, several genres have 3 entries, so
+  the default pop/happy top-5 now holds THREE pop songs and a cap of 2 fires (it drops
+  the third pop song). The lesson is that the knob's usefulness was gated by catalog
+  size, not by the algorithm -- which is exactly why a bigger, balanced catalog matters.
+- **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop (3.95)
+  and Confetti Skies (3.92), two genuine pop/happy matches, and promotes Velvet Hustle
+  at 2.00 -- a disco song that matches the listener's mood but NOT their genre. That is
+  a ~1.95-point quality cost at slot 2 for one extra genre. It does curb the
+  genre-dominance bias, but it spends the listener's stated taste on variety they did
+  not ask for. That trade is why the shipped `recommend_songs` is left unchanged and
+  diversity stays a separate, optional module.
 
 ## Testing
 
@@ -531,11 +546,13 @@ python -m pytest
 
 The test suite is a quality add -- the assignment does not require tests, but they
 act as a reproducibility and regression guard and double as an executable
-specification of the recipe. There are 50 tests across three files. `tests/`
+specification of the recipe. There are 62 tests across five files. `tests/`
 `test_recommender.py` covers the core recipe, `tests/test_evaluation.py` covers
-the Phase 4 evaluation profiles and the popularity experiment, and
-`tests/test_diversity.py` covers the genre diversity re-ranking side-car. Together
-they cover:
+the Phase 4 evaluation profiles and the popularity experiment,
+`tests/test_diversity.py` covers the genre diversity re-ranking side-car, and
+`tests/test_retriever.py` and `tests/test_explain.py` cover the Project 5 RAG layer
+(retrieval, grounding, the no-note guardrail, and the never-re-rank guarantee).
+Together they cover:
 
 - **Loading:** the real catalog loads exactly 20 rows with the right types;
   genre and mood are lower-cased; and malformed rows (a non-numeric cell, a short

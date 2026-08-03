@@ -62,7 +62,7 @@ against gold plating, where a developer adds features nobody asked for:
 
 ## Data Used
 
-The catalog is a small synthetic dataset of 20 songs stored in `data/songs.csv`.
+The catalog is a synthetic dataset of 46 songs stored in `data/songs.csv`.
 Each song has seven features: title, artist, genre, mood, energy (a 0.0 to 1.0
 float), tempo_bpm (an integer), and popularity (a 0.0 to 1.0 float). Popularity is
 data only. It is recorded for every song but left out of the scoring recipe by
@@ -73,28 +73,30 @@ favorite_genre, favorite_mood, and target_energy.
 This schema is a deliberate simplification of how the industry and MIR research
 categorize music, not an ad-hoc choice. The `energy` 0.0-1.0 field matches Spotify's
 `energy` audio feature in concept and scale; the single-label `genre` mirrors the
-bounded-list convention of the GTZAN benchmark (10 fixed genres, 9 of which this
-catalog uses); and the single-word `mood` is an interpretable stand-in for the
+bounded-list convention of the GTZAN benchmark (10 fixed genres, all of which this
+catalog now covers); and the single-word `mood` is an interpretable stand-in for the
 valence axis of Russell's valence-arousal model, which Spotify approximates with
 `valence` + `energy`. The known cost is that one mood word cannot separate, e.g.,
 "sad" (low energy, low valence) from "angry" (high energy, low valence); adding a
 `valence` field is the documented upgrade path. (Full sources in the README design
 notes.)
 
-Catalog make-up, which is the baseline for the Phase 4 bias study:
+Catalog make-up (the catalog was expanded in Project 5 from 20 to 46 songs to fix
+the biases the original 20 carried):
 
-- The 20 songs skew toward pop and high-energy tracks, and one cluster of
-  electronic-family genres (synthwave, edm, electronic, dreampop) makes up about
-  20% of the catalog.
-- Several moods are thinly covered. Dreamy, intense, mellow, and sad each appear
-  on only one song.
-- Some niche, perfect-match songs were deliberately given a low popularity value,
-  so the Phase 4 popularity experiment has something vivid to surface.
+- The catalog is now balanced: every genre has 2-3 songs (all 10 GTZAN genres are
+  covered, disco included), and every mood appears on at least 3 songs. The original
+  20-song catalog skewed toward pop and high energy and left four moods (dreamy,
+  intense, mellow, sad) on a single song each; the expansion corrects both.
+- Some niche, perfect-match songs are deliberately given a low popularity value, so
+  the Phase 4 popularity experiment has something vivid to surface. This was
+  preserved through the expansion (about a dozen strong matches sit at popularity
+  0.10-0.30).
 
 Known limits of this data:
 
-- The catalog is tiny at 20 songs, and hand-authored rather than drawn from real
-  listening data, so the results will not generalize.
+- The catalog is still modest at 46 songs, and hand-authored rather than drawn from
+  real listening data, so the results will not generalize.
 - There is no play-count, rating, or user-history data, so collaborative filtering
   is not possible. The popularity value is a single static number per song, not a
   record of interactions, so it does not enable collaborative filtering either.
@@ -179,10 +181,10 @@ catalog's numbers rather than a guarantee of the recipe, since a genre-only riva
 with a perfect energy fit can tie a genre-plus-mood match. The ranks below number
 one had no such protection. Even at the mild, defensible weight of 1.0, Summer
 Anthem, a pop chart hit sharing neither genre nor mood with a folk fan, climbed
-into the top five and buried real near-matches, and at weight 2.0 both Summer
-Anthem and Sunshine Pop did. This is the classic popularity bias and filter bubble
-failure, where a crowd signal quietly overrides personal fit, and it is exactly
-why the shipped recipe scores taste only and leaves popularity out.
+into the top five and buried a real near-match (Rainy Day Blues), and it did the
+same at weight 2.0. This is the classic popularity bias and filter bubble failure,
+where a crowd signal quietly overrides personal fit, and it is exactly why the
+shipped recipe scores taste only and leaves popularity out.
 
 ## Evaluation
 
@@ -223,10 +225,10 @@ number one, but popular non-matches invade the ranks below it.
 POP_WEIGHT = 2.0
 #  BEFORE (pure taste)                 AFTER (+ popularity)
 1  Wandering Roads (4.00, pop 0.18)    Wandering Roads (4.36)
-2  Backroad Sunset (1.85, pop 0.58)    Golden Hour     (3.39)
-3  Golden Hour     (1.75, pop 0.82)    Backroad Sunset (3.01)
-4  Rainy Day Blues (1.00, pop 0.25)    Summer Anthem   (2.50)   <- pop hit, no genre/mood match
-5  Acoustic Morning(0.95, pop 0.40)    Sunshine Pop    (2.35)   <- pop hit, no genre/mood match
+2  Paper Lanterns  (2.94, pop 0.16)    Golden Hour     (3.39)
+3  Backroad Sunset (1.85, pop 0.58)    Paper Lanterns  (3.26)
+4  Golden Hour     (1.75, pop 0.82)    Backroad Sunset (3.01)
+5  Rainy Day Blues (1.00, pop 0.25)    Summer Anthem   (2.50)   <- pop hit, no genre/mood match
 ```
 
 _What surprised me: how little it takes to move the number one song. A 0.05 gap in
@@ -273,20 +275,23 @@ arise.
    idea is now implemented as an optional extension in `src/diversity.py`. It is a
    post-ranking selection step that caps how many same-genre songs fill the list,
    and it is kept deliberately out of the shipped recipe. Measuring it produced two
-   findings that made keeping it out the right call. First, the obvious cap of no
-   more than 2 per genre is dead code on this catalog. At most 2 songs share any
-   genre, and no top-5 across all 231 profiles ever holds 3, so a cap of 2 can
-   never fire. Only a cap of 1 does anything. Second, a cap of 1 is not free. On
-   the default profile it demotes a genuine 3.95 pop/happy match and promotes a
-   0.90 song matching neither the listener's genre nor mood, a measured 3.05-point
-   quality cost for one slot of breadth. The anti-popularity guard remains future
-   work. Either guard is a selection step layered on top of the recipe, so the base
-   recipe stays three terms and popularity stays out of scoring.
-2. **Expand the catalog for the thin moods.** Four moods, dreamy, intense, mellow,
-   and sad, have a single song each, so those profiles get little real choice and
-   the mood term barely differentiates results. Adding songs across these
-   underrepresented moods would give niche profiles genuine matches and reduce the
-   pop and high-energy skew of the current catalog.
+   findings that made keeping it out the right call. First, a cap of no more than 2
+   per genre was dead code on the original 20-song catalog (at most 2 songs shared
+   any genre, so across all 231 profiles no top-5 ever held 3 of one genre), but it
+   FIRES on the expanded 46-song catalog, where the default pop/happy top-5 now holds
+   three pop songs and a cap of 2 drops the third. The knob's usefulness was gated by
+   catalog size, not by the algorithm. Second, a cap of 1 is not free. On the default
+   profile it demotes two genuine pop/happy matches (3.95 and 3.92) and promotes a
+   2.00 disco song matching the listener's mood but not their genre, a measured
+   ~1.95-point quality cost at slot 2 for one extra genre. The anti-popularity guard
+   remains future work. Either guard is a selection step layered on top of the recipe,
+   so the base recipe stays three terms and popularity stays out of scoring.
+2. **Expand the catalog (done in Project 5).** The original 20 songs left four moods
+   (dreamy, intense, mellow, sad) on a single song each and skewed toward pop and
+   high energy. Project 5 expanded the catalog to 46 songs, giving every mood at least
+   3 songs, every genre 2-3, and all 10 GTZAN genres coverage -- which resolved the
+   thin-mood and composition-skew biases. Further growth toward a real, larger dataset
+   remains the natural next step.
 3. **Add a lightweight feedback loop.** The model runs one static profile with no
    way for a listener to react, which is documented as an honest non-goal and an
    expectation gap. A simple rate-or-skip signal, or a target-energy slider to
@@ -300,9 +305,11 @@ the RAG explanation layer I added on top of the original recommender.
 
 ### Limitations and biases in the system
 
-The RAG layer inherits every bias of the recommender underneath it -- genre
-dominance, the pop-and-high-energy skew of the catalog, the four moods that appear
-on only one song -- and then adds its own. The explanation is only ever as good as
+The RAG layer inherits the biases of the recommender underneath it -- chiefly genre
+dominance, where a full genre+mood match almost always outranks everything else --
+and then adds its own. (The catalog's own composition biases, the pop/high-energy
+skew and the thin single-song moods, were fixed by the Project 5 expansion to 46
+balanced songs.) The explanation is only ever as good as
 the note it retrieves: if a note is thin or slightly off, the explanation inherits
 that, and my notes are hand-written, so my own wording choices are a bias baked into
 the corpus. There is also a tone bias worth naming -- a fluent "why this fits you"
@@ -372,10 +379,13 @@ adding the popularity column to the catalog without ever scoring on it.
 Much later, building the diversity extension, I proposed my own rule: no more than
 2 songs of any one genre in the list I show. It sounded sensible. This time,
 though, I asked the question the agents had asked me. Can it ever fire? So we
-measured. The catalog holds 20 songs with at most 2 of any single genre, and
-across all 231 possible genre, mood, and energy profiles, no top-5 anywhere ever
-contains 3 songs of one genre. A cap of 2 could never fire once. Only a cap of 1 does anything, so 1
-became the default, and a test now pins that so nobody quietly changes it back.
+measured. On the original 20-song catalog there were at most 2 of any single genre,
+and across all 231 possible genre, mood, and energy profiles, no top-5 anywhere ever
+contained 3 songs of one genre. A cap of 2 could never fire once; only a cap of 1 did
+anything, so 1 became the default. (When Project 5 later expanded the catalog to 46
+songs, a cap of 2 began to fire -- which only sharpened the point: the feature's
+usefulness was gated by catalog size, not by the algorithm. A test now pins that
+size-dependent behavior so nobody changes it back by accident.)
 
 That is the learning moment. In the first case an AI caught a dead feature for me.
 In the third I caught my own. Somewhere in between I stopped asking whether an idea
@@ -443,8 +453,8 @@ the recipe. Rather than delete the claim, the reviewer swept the 209 of those
 profiles that have an exact genre-and-mood match, at 21 energy targets each, and
 found the cheapest
 weight at which any non-matching song unseats the pure number one is 2.73 across
-the whole catalog. The finding survives, but it is now a measured property of these
-20 songs instead of something I asserted.
+the whole catalog. The finding survives, but it is now a measured property of the
+catalog instead of something I asserted.
 
 ### What surprised me about simple algorithms
 
@@ -474,7 +484,10 @@ beats Sunshine Pop 4.00 to 3.95, and the entire reason is that its energy of 0.8
 sits one notch closer to my target than 0.85 does. Push the target to 1.0 and the
 order flips. And the diversity cap surprised me in the other direction, because a
 feature can be worse than useless. My cap of 2 would have passed code review,
-passed every test, been documented as a bias guard, and changed nothing, ever.
+passed every test, been documented as a bias guard, and changed nothing, ever --
+on the 20-song catalog. Expanding to 46 songs in Project 5 finally made it fire,
+which underlined the real lesson: the feature's value depended on the data, not
+the code.
 
 ### What I would try next
 
@@ -482,14 +495,15 @@ The anti-popularity guard is the obvious next piece, and what I would do
 differently is evaluate it before writing it. Measure whether it can fire at all,
 then measure what it costs when it does. I have that number for diversity. At a cap
 of 1 on the default profile it evicts Sunshine Pop, a genuine 3.95 pop and happy
-match, to promote an edm song at 0.90 matching neither my genre nor my mood. That
-is 3.05 points of match quality spent on one slot of variety the listener never
+match, to promote a disco song at 2.00 matching my mood but not my genre. That is
+about 1.95 points of match quality spent on one slot of variety the listener never
 asked for, which is why it ships as an optional side-car and stays out of the
 recommender.
 
-I would also expand the catalog. Four moods, dreamy, intense, mellow, and sad, have
-only one song each, so any profile asking for them is choosing from almost nothing.
-Adding songs there would do more for real output quality than any algorithm change
+I already expanded the catalog in Project 5. Four moods -- dreamy, intense, mellow,
+and sad -- used to have only one song each, so any profile asking for them was
+choosing from almost nothing; the catalog now has 46 songs with every mood on at
+least three. That did more for real output quality than any algorithm change
 I could make, and it would let me test the thin-mood behavior properly instead of
 documenting it as a limitation.
 
