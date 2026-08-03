@@ -7,10 +7,10 @@ renders the ranked songs with their grounded RAG explanations. The CLI
 (`python -m src.main`) remains the graded, reproducible path; this is optional polish.
 
 Two views:
-- Single  -- one configuration (the finished Project 5 system).
+- Single  -- one configuration (the finished system).
 - Compare -- a "build your own model" A/B lab: the same taste profile run through two
   independently-configured pipelines side by side (catalog size, RAG on/off, live vs
-  offline, genre variety), to show what each Project 5 change actually did.
+  offline, genre variety), to show what each change actually did.
 
 Run it from the repo root:
 
@@ -37,8 +37,8 @@ from src.retriever import load_notes, retrieve_note
 
 _HERE = os.path.dirname(__file__)
 
-# The two selectable catalogs. "Original (20)" is the authentic Module 3 catalog
-# pulled from git history; "Expanded (46)" is the rebalanced Project 5 catalog.
+# The two selectable catalogs. "Original (20)" is the authentic original catalog
+# pulled from git history; "Expanded (46)" is the rebalanced catalog.
 CATALOGS = {
     "Expanded (46)": os.path.join(_HERE, "data", "songs.csv"),
     "Original (20)": os.path.join(_HERE, "data", "songs_original.csv"),
@@ -75,7 +75,7 @@ def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
 
     Returns (results, explainer_mode, catalog_size). When rag_on is False we skip
     retrieval/generation entirely and return the raw recommender output (the
-    original Module 3 behavior: score + rule-based reasons only).
+    original behavior: score + rule-based reasons only).
     """
     songs = _load_catalog(catalog_key)
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
