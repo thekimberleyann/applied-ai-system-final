@@ -153,8 +153,11 @@ def _side_controls(label: str, catalog_keys: list[str], key_prefix: str) -> dict
                            disabled=not rag_on,
                            help="Only when RAG is on. Uses Gemini (needs a key; slower).")
     one_per_genre = st.checkbox("Genre variety", value=False, key=f"{key_prefix}_div",
-                                help="Mix up the results so you don't get several "
-                                     "songs from the same genre.")
+                                help="Caps the list to ONE song per genre: only each "
+                                     "genre's single top-scoring song is kept, and any "
+                                     "other songs of that genre are dropped (even ones "
+                                     "that would otherwise rank higher overall). Trades "
+                                     "some taste-match for a wider spread of genres.")
     return {"catalog_key": catalog_key, "rag_on": rag_on,
             "use_live": use_live, "one_per_genre": one_per_genre}
 
@@ -257,8 +260,13 @@ def main() -> None:
                                           help="Off: instant offline explanations. On: "
                                                "Gemini phrases each one (needs a key).")
                 single_div = st.checkbox("Genre variety (one per genre)", value=False,
-                                         help="Mix up the results so you don't get "
-                                              "several songs from the same genre.")
+                                         help="Caps the list to ONE song per genre: only "
+                                              "each genre's single top-scoring song is "
+                                              "kept, and any other songs of that genre "
+                                              "are dropped (even ones that would "
+                                              "otherwise rank higher overall). Trades "
+                                              "some taste-match for a wider spread of "
+                                              "genres.")
                 cfg_a = cfg_b = None
             else:
                 st.divider()
