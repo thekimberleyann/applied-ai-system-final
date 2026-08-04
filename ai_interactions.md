@@ -174,6 +174,15 @@ quoted in the model card remains accurate. The suite went from 35 to 40 tests.
 line of code. It was learning that a passing test can be worse than no test when
 it is named after a case it does not actually exercise.
 
+> Note (added 2026-08-04): the popularity figures in this entry were measured on
+> the original 20-song catalog and were correct then. The catalog expansion the
+> day before submission invalidated them without any scoring code changing. The
+> gap behind the folk number one is 1.06, not 2.15. The cheapest dethroning
+> weight is 1.63, not 2.73, which now sits BELOW the weight of 2.0 my own
+> experiment demonstrates, so the "safe at every weight shown" claim no longer
+> holds. I left the entry as written because it records what I believed at the
+> time, and re-derived the current numbers with `python -m src.sweep`.
+
 ---
 
 ## 8. A diversity extension, measured before it was built

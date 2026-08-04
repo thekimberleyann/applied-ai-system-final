@@ -459,6 +459,16 @@ weight at which any non-matching song unseats the pure number one is 2.73 across
 the whole catalog. The finding survives, but it is now a measured property of the
 catalog instead of something I asserted.
 
+Expanding the catalog to 46 songs then broke that finding on the very next
+commit, and I shipped it anyway. Re-running the sweep returns 1.63, below the
+weight of 2.0 my own experiment demonstrates, so some listener's deserved number
+one was already being dethroned in output I had submitted. I caught it a day
+later, and only because a review re-ran the code instead of reading the prose.
+The lesson is not that I got a number wrong. It is that a measured claim quietly
+becomes an asserted one the moment the data underneath it changes and nobody
+re-runs the measurement. That is why the sweep is now a committed module instead
+of a script I threw away.
+
 ### What surprised me about simple algorithms
 
 A green test suite can manufacture confidence it has not earned.
