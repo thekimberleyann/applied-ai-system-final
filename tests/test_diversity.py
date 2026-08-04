@@ -135,10 +135,13 @@ def test_input_list_and_song_dicts_are_not_mutated():
 # ---------------------------------------------------------------------------
 
 def test_empty_ranked_returns_empty():
+    """Nothing to select from yields [], not an IndexError on the first item."""
     assert diversify([], k=5, max_per_genre=1) == []
 
 
 def test_k_zero_or_negative_returns_empty():
+    """Asking for zero or fewer songs yields [], and a negative k is not treated
+    as a Python-style slice from the end."""
     ranked = _fake_ranked()
     assert diversify(ranked, k=0, max_per_genre=1) == []
     assert diversify(ranked, k=-3, max_per_genre=1) == []

@@ -28,6 +28,9 @@ REAL_CSV = os.path.join(
 
 @pytest.fixture
 def songs() -> list[dict]:
+    """The real shipped catalog. These tests assert on specific titles and exact
+    scores, so they are checks against the actual data file, not synthetic rows:
+    editing data/songs.csv is expected to move these assertions."""
     return load_songs(REAL_CSV)
 
 
