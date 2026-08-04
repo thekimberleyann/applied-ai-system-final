@@ -33,6 +33,46 @@ import textwrap
 GEMINI_MODEL_NAME = "gemini-flash-latest"
 
 
+def build_explain_prompt(reasons: list[str], note: str, prefs: dict) -> str:
+    """Assemble the single-song explanation prompt. Pure: no I/O, no API call.
+
+    Lifted out of the live explainer so the glass-box Inspector can DISPLAY the
+    prompt without a key and without spending a request. Building the string has
+    no side effects, so the panel that demonstrates what retrieval actually does
+    (it pastes the retrieved text into the prompt for you) stays visible in the
+    default offline configuration, which is the one every reviewer runs.
+
+    The prompt hands the model exactly three things: the retrieved note, the
+    listener's stated preferences, and the deterministic match reasons. It then
+    forbids any fact not present in the note. Note what is NOT here: the score's
+    authority. The reasons are labelled as already decided precisely so the model
+    treats the ranking as fixed input rather than something to re-litigate.
+    """
+    return textwrap.dedent(
+        f"""
+        You explain, in two sentences, why a song was recommended to a listener.
+
+        The listener's taste profile:
+          favorite genre: {prefs.get('favorite_genre')}
+          favorite mood:  {prefs.get('favorite_mood')}
+          target energy:  {prefs.get('target_energy')}
+
+        The only facts you may use about the song are in this note:
+        \"\"\"{note}\"\"\"
+
+        Why our recommender matched it (already decided, do not re-rank):
+        {', '.join(reasons)}
+
+        Rules:
+        - Use ONLY facts stated in the note. Do not invent artists, awards,
+          lyrics, chart positions, or anything not written above.
+        - Do not claim the song is objectively good; frame it as a fit for THIS
+          listener's stated taste.
+        - Keep it to two sentences, plain and warm.
+        """
+    ).strip()
+
+
 class VibeExplainer:
     """Turns a chosen song + its retrieved note into a grounded explanation.
 
@@ -159,29 +199,7 @@ class VibeExplainer:
         the same deterministic fallback used elsewhere, so a live failure never
         crashes the run or blocks a recommendation.
         """
-        prompt = textwrap.dedent(
-            f"""
-            You explain, in two sentences, why a song was recommended to a listener.
-
-            The listener's taste profile:
-              favorite genre: {prefs.get('favorite_genre')}
-              favorite mood:  {prefs.get('favorite_mood')}
-              target energy:  {prefs.get('target_energy')}
-
-            The only facts you may use about the song are in this note:
-            \"\"\"{note}\"\"\"
-
-            Why our recommender matched it (already decided, do not re-rank):
-            {', '.join(reasons)}
-
-            Rules:
-            - Use ONLY facts stated in the note. Do not invent artists, awards,
-              lyrics, chart positions, or anything not written above.
-            - Do not claim the song is objectively good; frame it as a fit for THIS
-              listener's stated taste.
-            - Keep it to two sentences, plain and warm.
-            """
-        ).strip()
+        prompt = build_explain_prompt(reasons, note, prefs)
 
         try:
             response = self._client.models.generate_content(
