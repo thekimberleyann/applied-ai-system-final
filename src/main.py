@@ -135,7 +135,7 @@ def print_recommendations(header: str, prefs: dict, songs: list[dict], k: int = 
             # The reasons already carry their per-term point values, and those
             # values sum to the score, so this is the full per-term breakdown.
             print(f"     - {reason}")
-    print()  # blank line between blocks
+    print()
 
 
 def run_rag_block(header: str, prefs: dict, songs: list[dict],

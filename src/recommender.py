@@ -240,7 +240,6 @@ def recommend_songs(user_prefs: dict, songs: list[dict], k: int = 5) -> list:
                                    safe in Python)
         * k <= 0                -> returns [] (an empty slice)
     """
-    # Score every song and pair it with its explanation.
     scored = []
     for song in songs:
         score, reasons = score_song(user_prefs, song)

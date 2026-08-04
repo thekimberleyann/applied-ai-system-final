@@ -155,7 +155,6 @@ def diversify(ranked: list, k: int = 5, max_per_genre: int = 1) -> list:
         # the running count to 0 for a genre we have not seen yet.
         if genre_counts.get(genre, 0) < max_per_genre:
             kept.append(item)
-            # Record that this genre now occupies one more slot.
             genre_counts[genre] = genre_counts.get(genre, 0) + 1
             # Stop the moment we have filled k slots. This is what makes an
             # unreachable-k case return fewer than k: if we run off the end of
@@ -196,7 +195,6 @@ def _print_before_after(baseline: list, diversified: list) -> None:
     rows = max(len(baseline), len(diversified))
     print(f"{'#':<3}{'BEFORE (pure recipe)':<40}{'AFTER (one per genre)':<40}")
     for i in range(rows):
-        # Format one side's cell, or leave it blank if that side has no row here.
         if i < len(baseline):
             b_song, b_score, _b = baseline[i]
             before = f"{b_song['title']} [{b_song['genre']}] {b_score:.2f}"
