@@ -328,9 +328,12 @@ explanation as a factual claim about a song ("this won awards," "everyone loves
 this") when it is really a vibe match for one listener's stated taste. I designed
 against that three ways. First, the model is only ever allowed to ground on the
 retrieved note, and the live prompt explicitly forbids inventing artists, awards,
-lyrics, or chart positions. Second, when no note clears the confidence floor the
-system refuses to describe the song at all and falls back to a score-only line --
-no note, no claims. Third, the score and its reasons are always shown alongside the
+lyrics, or chart positions. Second, when no note passes both gates, the
+confidence floor and a check that the retrieved note is actually this song's own,
+the system refuses to describe the song at all and falls back to a score-only line:
+no note, no claims. Measuring later showed the identity check is the gate that does
+the work. The floor alone never fired for any real song, because a sibling's note
+scores far above it. Third, the score and its reasons are always shown alongside the
 prose, so the explanation can never be the only thing a reader sees. The LLM never
 ranks, so it can never be used to quietly promote a song for a reason it will not
 state.
