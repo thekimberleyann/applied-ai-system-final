@@ -73,7 +73,7 @@ pip install -r requirements.txt
 # Default: runs fully offline, deterministic, no API key needed.
 python -m src.main
 
-# Run the tests (78 tests, all offline).
+# Run the tests (138 tests, all offline).
 python -m pytest
 
 # Optional live mode: set a key to have Gemini phrase the explanations.
@@ -253,7 +253,7 @@ Guardrail: any recommendation with no note above the confidence floor falls back
 
 ```
 $ python -m pytest -q
-78 passed
+138 passed
 ```
 
 | What is tested | Where | Result |

@@ -352,7 +352,7 @@ was a three-line assertion, not a hope.
 **Helpful.** When I worried the project would be unreproducible if it needed an API
 key, the AI suggested making the explainer default to a deterministic offline stub
 and only call the live model when a key is present. That one decision is what lets
-`python -m src.main` and all 78 tests run identically on any machine with no key and
+`python -m src.main` and all 138 tests run identically on any machine with no key and
 no network -- it is the reason a grader can actually run this. I kept it exactly.
 
 **Flawed.** The same AI wrote the first offline explainer using

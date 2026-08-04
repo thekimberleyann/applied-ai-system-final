@@ -64,14 +64,19 @@ python -m pytest
 
 The test suite is a quality add -- the assignment does not require tests, but they
 act as a reproducibility and regression guard and double as an executable
-specification of the recipe. There are 78 tests across six files. `tests/`
+specification of the recipe. There are 138 tests across eight files. `tests/`
 `test_recommender.py` covers the core recipe, `tests/test_evaluation.py` covers
 the Phase 4 evaluation profiles and the popularity experiment,
 `tests/test_diversity.py` covers the genre diversity re-ranking side-car, and
 `tests/test_retriever.py` and `tests/test_explain.py` cover the Project 5 RAG layer
 (retrieval, grounding, the no-note guardrail, and the never-re-rank guarantee), and
 `tests/test_glassbox.py` covers the Inspector (the scoreboard agreeing with the
-retriever, inspection not perturbing a run, and prompt assembly without a key).
+retriever, inspection not perturbing a run, and prompt assembly without a key),
+`tests/test_evaluate_retrieval.py` covers the retrieval metrics themselves plus the
+identity filter that stops a song being explained with another song's facts, and
+`tests/test_config.py` pins the editable knobs: that the defaults are exactly the
+shipped values, that the reasons-sum-to-the-score guarantee survives ANY weighting
+and not just 2/1/1, and that UI edits never write back to those defaults.
 Together they cover:
 
 - **Loading:** the real catalog loads exactly 46 rows with the right types;
