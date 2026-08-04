@@ -316,7 +316,14 @@ class VibeExplainer:
             return [e for e in explanations], self._status_message(e)  # type: ignore
 
     def _batch_live_call(self, grounded: list[int], items: list[dict], prefs: dict) -> str:
-        """Build one prompt covering every grounded song and call Gemini once."""
+        """Build one prompt covering every grounded song and call Gemini once.
+
+        The numbers 1..len(grounded) in the prompt are positions within the
+        GROUNDED subset, not positions in `items`. `grounded` holds the original
+        indices, so explain_batch maps each parsed entry back with
+        `grounded[n]`. A no-note song is absent from the prompt entirely, which
+        is the guardrail: the model is never shown a song it has no facts for.
+        """
         blocks = []
         for n, i in enumerate(grounded, start=1):
             it = items[i]
@@ -366,8 +373,17 @@ class VibeExplainer:
 
         Matches entries that begin a line with 'N.' and captures everything up to the
         next numbered entry, so a two-sentence explanation spanning lines is kept whole.
+
+        The entry is placed by the number the MODEL wrote, not by match order, so a
+        response that renumbers or omits an entry cannot shift the others out of
+        alignment; the range check discards any number outside 1..n. Slots the model
+        never produced stay None, which is why explain_batch treats None as "fall
+        back to the offline stub for this song".
         """
         result: list[str | None] = [None] * n
+        # re.S makes `.` span newlines so a multi-line entry is captured whole; the
+        # lookahead stops the capture at the next 'N.' line or end of text, and the
+        # non-greedy `+?` keeps it from swallowing the rest of the response.
         for m in re.finditer(r"(?m)^\s*(\d+)\.\s*(.+?)(?=\n\s*\d+\.\s|\Z)", text, re.S):
             idx = int(m.group(1)) - 1
             if 0 <= idx < n:
