@@ -19,7 +19,7 @@ Run it from the repo root:
 
 Performance: defaults to the OFFLINE deterministic explainer, so first load is instant
 (no network, no google-genai import). Turn on live phrasing to use Gemini (needs
-GEMINI_API_KEY; one API call per song, subject to rate limits). Results are cached
+GEMINI_API_KEY; one batched API call per run, subject to rate limits). Results are cached
 per (profile, options) so repeats are instant.
 """
 
@@ -39,6 +39,9 @@ _HERE = os.path.dirname(__file__)
 
 # The two selectable catalogs. "Original (20)" is the authentic original catalog
 # pulled from git history; "Expanded (46)" is the rebalanced catalog.
+# Both share the SINGLE note corpus in data/song_notes.md: every title in the
+# 20-song file also appears in the 46-song file, so the corpus covers both and
+# retrieval behaves the same whichever catalog a Compare side selects.
 CATALOGS = {
     "Expanded (46)": os.path.join(_HERE, "data", "songs.csv"),
     "Original (20)": os.path.join(_HERE, "data", "songs_original.csv"),
@@ -62,7 +65,17 @@ def _load_corpus() -> dict:
 
 @st.cache_resource(show_spinner=False)
 def _get_explainer(force_offline: bool) -> VibeExplainer:
-    """One explainer per mode, built lazily. Offline never imports google-genai."""
+    """One explainer per mode, built lazily. Offline never imports google-genai.
+
+    cache_resource (not cache_data) because a VibeExplainer holds a live client
+    object: cache_data would try to serialize the return value, while
+    cache_resource hands back the same instance. Keying on force_offline means
+    the live and offline explainers are two separate cached instances.
+
+    The .env load is deliberately inside the not-force_offline branch, so the
+    offline path never touches the filesystem looking for a key. VibeExplainer
+    reads GEMINI_API_KEY in its constructor, so the load must happen first.
+    """
     if not force_offline:
         _load_dotenv_if_present()
     return VibeExplainer(force_offline=force_offline)
@@ -77,11 +90,28 @@ def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
     skip retrieval/generation and return the raw recommender output (score + rule-
     based reasons only). `status` is None unless live phrasing failed (e.g. a rate
     limit) and fell back to offline, in which case it is a one-line message to show.
+
+    This function repeats the retrieve-then-explain sequence that
+    src/explain.py's explain_recommendations performs, rather than calling it,
+    because the UI needs two things that function does not offer: the optional
+    diversify step between ranking and explaining, and a flattened result dict
+    (title/artist/genre pulled up to the top level) for the card renderer.
+
+    Every parameter is a plain scalar or bool so st.cache_data can hash the call
+    and reuse a previous run's result.
     """
     songs = _load_catalog(catalog_key)
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
 
+    # Rank the WHOLE catalog, not just the top k. diversify drops songs whose
+    # genre is already full, so it needs the ranked tail below position k to
+    # backfill from; a pre-truncated top-k would leave holes instead. max()
+    # keeps this correct if a caller ever asks for more songs than the catalog
+    # holds (recommend_songs slices safely past the end either way).
     pool = recommend_songs(prefs, songs, k=max(k, len(songs)))
+    # The chosen set is fixed HERE, before any explanation exists. Everything
+    # below only attaches prose to these already-decided picks: neither
+    # retrieval nor the explainer can add, drop, or reorder a song.
     chosen = diversify(pool, k=k, max_per_genre=1) if one_per_genre else pool[:k]
 
     if not rag_on:
@@ -104,6 +134,8 @@ def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
              for (s, sc, r, n, c, nt) in retrieved]
     explanations, status = client.explain_batch(items, prefs)
 
+    # explain_batch returns explanations positionally aligned to `items`, so
+    # zipping them back against `retrieved` pairs each song with its own text.
     results = []
     for (song, score, reasons, note, confidence, note_title), explanation in zip(
             retrieved, explanations):
@@ -176,7 +208,12 @@ def _config_summary(cfg: dict, mode: str) -> str:
 
 
 def _side_controls(label: str, catalog_keys: list[str], key_prefix: str) -> dict:
-    """Render one side's independent pipeline controls; return its config dict."""
+    """Render one side's independent pipeline controls; return its config dict.
+
+    key_prefix ("a" or "b") is folded into every widget key. Streamlit keys must
+    be unique across the page, so without the prefix the two Compare sides would
+    resolve to the same widget and always report identical settings.
+    """
     st.markdown(f"**{label}**")
     catalog_key = st.selectbox("Catalog", catalog_keys, key=f"{key_prefix}_cat")
     rag_on = st.checkbox("RAG explanations", value=True, key=f"{key_prefix}_rag",
@@ -295,6 +332,9 @@ def main() -> None:
 
             if view == "Single":
                 st.divider()
+                # Single view has no RAG toggle: it always runs the finished
+                # system with explanations on. Turning RAG off is a Compare-view
+                # experiment, so the flag is hard-coded True rather than exposed.
                 single_rag = True
                 single_live = st.checkbox("Use live AI phrasing (slower)", value=False,
                                           help="Off: instant offline explanations. On: "
@@ -382,6 +422,8 @@ def main() -> None:
                                                    cfg_b["use_live"], cfg_b["one_per_genre"])
 
     # Show any live-fallback status once (both sides usually share the same message).
+    # dict.fromkeys drops duplicate strings while keeping first-seen order, so two
+    # sides that hit the same rate limit produce one banner, not two identical ones.
     for msg in dict.fromkeys(s for s in (status_a, status_b) if s):
         st.warning(msg)
 

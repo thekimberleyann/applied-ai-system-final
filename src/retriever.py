@@ -20,7 +20,7 @@ Why retrieval at all, when the notes are keyed by title?
          facts. That fallback is the core guardrail of the whole feature.
 
 The similarity metric is deliberately simple (token overlap). This is a small,
-transparent project; embeddings would be gold plating for a 20-song catalog.
+transparent project; embeddings would be gold plating at this catalog size (46).
 """
 
 from __future__ import annotations

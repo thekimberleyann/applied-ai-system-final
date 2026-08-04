@@ -77,7 +77,7 @@ def small_catalog() -> list[dict]:
 # load_songs / real data
 # ---------------------------------------------------------------------------
 
-def test_real_csv_loads_twenty_rows():
+def test_real_csv_loads_forty_six_rows():
     """The shipped catalog must load exactly 46 well-formed songs."""
     songs = load_songs(REAL_CSV)
     assert len(songs) == 46

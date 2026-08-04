@@ -19,23 +19,33 @@ construction: delete this file and the recommender is exactly as it was.
 Run with:  python -m src.diversity
 
 THE MOST IMPORTANT FINDING (be honest about it):
-A cap of max_per_genre=2 is DEAD CODE on this catalog. The catalog has 20 songs
-and AT MOST 2 songs of any single genre (pop x2, hip-hop x2, everything else
-x1). Brute-forcing all 231 (genre, mood, energy) profiles, NO top-5 anywhere
-ever contains 3 songs of one genre, so a cap of 2 can never fire -- it would
-change nothing, ever. That is why the useful default is max_per_genre=1. This
-echoes an earlier decision in this project: an AI proposed a "popularity
-tie-breaker" that would almost never fire, and it was rejected for exactly that
-reason. A knob that cannot change the output is not a feature. We keep the
-honest version -- cap of 1 -- and document that cap 2 is a no-op.
+A cap of max_per_genre=2 was DEAD CODE on the original 20-song catalog and is
+LIVE on the shipped 46-song one. Both halves are kept here, because the change
+between them is the real lesson: the knob's usefulness was gated by CATALOG
+SIZE, not by the algorithm.
+  * 20-song catalog: at most 2 songs of any single genre (pop x2, hip-hop x2,
+    everything else x1). Sweeping all 2178 (genre, mood, energy) profiles, no
+    top-5 anywhere held 3 songs of one genre, so a cap of 2 could never fire.
+  * 46-song catalog: eight genres carry 3 songs (pop, rock, jazz, blues,
+    hip-hop, metal, dreampop, disco). Sweeping all 2299 profiles, 968 of them
+    produce a top-5 holding 3 of one genre, so a cap of 2 fires routinely.
+Every number in this paragraph is produced by src/sweep.py (run
+`python -m src.sweep`), which is committed precisely so these claims can be
+re-derived rather than trusted. An earlier version of this docstring quoted a
+sweep whose script was never committed, and its figures silently went stale
+when the catalog grew. That is the mistake this file no longer makes.
+
+A cap of 1 remains the default, but the original reason for that default (cap 2
+does nothing) no longer holds, so it now rests on the trade-off below instead.
 
 THE TRADE-OFF (do not oversell this):
 Diversity is not free. On the default profile (pop / happy / 0.80) enforcing
-one-per-genre demotes Sunshine Pop -- a genuine 3.95-scoring pop/happy match --
-and promotes Dance All Night at 0.90, an edm song that matches NEITHER the
-user's genre NOR their mood. That is a 3.05-point quality cost to buy one slot
-of genre variety. It does mitigate the documented "genre dominance" bias (two
-near-identical pop hits crowding the top), but it trades the user's stated taste
+one-per-genre demotes Sunshine Pop (3.95) and Confetti Skies (3.92), both
+genuine pop/happy matches, and promotes Velvet Hustle (disco, 2.00), Midnight
+Drive (synthwave, 0.95) and Crown Season (hip-hop, 0.95), none of which match
+the user's genre. The cost at slot 2 alone is 1.95 points (3.95 replaced by
+2.00). It does mitigate the documented "genre dominance" bias (near-identical
+pop hits crowding the top), but it trades the user's stated taste
 for breadth they never asked for. For that reason diversity is kept OUT of the
 shipped recommend_songs, just as popularity was: the shipped recipe answers
 "what fits my vibe," and this side-car answers a different question, "show me a
@@ -228,7 +238,7 @@ def main() -> None:
     _base2, diversified2 = diversity_report(PROFILE, songs, k=5, max_per_genre=2)
     base2_names = [s["title"] for (s, _s, _r) in baseline]
     div2_names = [s["title"] for (s, _s, _r) in diversified2]
-    print("--- max_per_genre = 2  (dead cap on this catalog) ---")
+    print("--- max_per_genre = 2  (dead on the 20-song catalog, LIVE on this one) ---")
     print(f"  BASELINE top-5:     {', '.join(base2_names)}")
     print(f"  max_per_genre=2:    {', '.join(div2_names)}")
     print(f"  identical to baseline? {base2_names == div2_names}")
@@ -242,17 +252,18 @@ def main() -> None:
         "which of the already-ranked songs to show, capping how many share a genre.\n"
         "The 0.0-4.0 scale and the reasons-sum-to-the-score guarantee are untouched.\n"
         "\n"
-        "The honest finding: a cap of 2 is DEAD CODE on this catalog. There are 20\n"
-        "songs and at most 2 of any one genre, and across all 231 profiles no top-5\n"
-        "ever holds 3 of a genre, so a cap of 2 can never fire -- see the identical\n"
-        "lists above. Only a cap of 1 changes anything, which is why it is the\n"
-        "default. This is the same reason the earlier popularity tie-breaker was\n"
-        "rejected: a knob that almost never fires is not worth shipping.\n"
+        "The honest finding, and how it CHANGED: a cap of 2 was dead code on the\n"
+        "original 20-song catalog (at most 2 songs per genre, and across all 2178\n"
+        "swept profiles no top-5 ever held 3 of a genre). On this 46-song catalog\n"
+        "eight genres carry 3 songs, 968 of 2299 swept profiles produce a top-5\n"
+        "holding 3 of one genre, and the cap fires -- see the differing lists above.\n"
+        "The knob was gated by catalog size, not by the algorithm. Re-derive these\n"
+        "numbers yourself with: python -m src.sweep\n"
         "\n"
         "And a cap of 1 is not free. On this profile it demotes Sunshine Pop, a\n"
-        "real 3.95 pop/happy match, and promotes Dance All Night at 0.90 -- an edm\n"
-        "song matching NEITHER the user's genre NOR their mood. That is a 3.05-point\n"
-        "quality cost for one slot of genre breadth. It does curb the genre-dominance\n"
+        "real 3.95 pop/happy match, and promotes Velvet Hustle at 2.00, a disco\n"
+        "song matching the listener's mood but NOT their genre. That is a 1.95-point\n"
+        "quality cost at slot 2 for one slot of genre breadth. It does curb the genre-dominance\n"
         "bias (two near-identical pop hits at the top), but it spends the listener's\n"
         "stated taste on variety they did not ask for. That trade is why diversity\n"
         "stays OUT of the shipped recipe, exactly as popularity did: the shipped\n"
