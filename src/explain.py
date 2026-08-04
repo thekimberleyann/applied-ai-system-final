@@ -54,38 +54,35 @@ def explain_recommendations(
     are passed in (not built here) so the corpus is loaded once and the same
     explainer -- with its already-decided live/offline mode -- is reused per run.
     """
-    results: list[dict] = []
-
-    for song, score, reasons in recommend_songs(prefs, songs, k=k):
+    # Retrieve first for every recommendation, then explain them all in ONE batched
+    # call (a single API request in live mode, keeping multi-song queries under the
+    # rate limit). The offline path is unaffected: the batch just calls the
+    # deterministic stub per grounded song.
+    ranked = recommend_songs(prefs, songs, k=k)
+    retrieved = []
+    for song, score, reasons in ranked:
         note, confidence, note_title = retrieve_note(song, notes)
+        retrieved.append((song, score, reasons, note, confidence, note_title))
+
+    items = [{"song": s, "score": sc, "reasons": r, "note": n}
+             for (s, sc, r, n, c, nt) in retrieved]
+    explanations, status = client.explain_batch(items, prefs)
+    if status:
+        logger.warning("live explainer status: %s", status)
+
+    results: list[dict] = []
+    for (song, score, reasons, note, confidence, note_title), explanation in zip(
+            retrieved, explanations):
         grounded = note is not None
-
-        explanation = client.explain(song, score, reasons, note, prefs)
-
-        # One structured log line per recommendation: what was retrieved, how
-        # confident, which explainer path ran, and whether the no-note guardrail
-        # fired. This is the reliability trail the README summarizes.
         logger.info(
             "rec=%r score=%.2f retrieved=%r confidence=%.2f mode=%s grounded=%s",
-            song.get("title"),
-            score,
-            note_title,
-            confidence,
-            client.mode,
-            grounded,
+            song.get("title"), score, note_title, confidence, client.mode, grounded,
         )
-
-        results.append(
-            {
-                "song": song,
-                "score": score,
-                "reasons": reasons,
-                "note_title": note_title,
-                "confidence": confidence,
-                "grounded": grounded,
-                "explanation": explanation,
-            }
-        )
+        results.append({
+            "song": song, "score": score, "reasons": reasons,
+            "note_title": note_title, "confidence": confidence,
+            "grounded": grounded, "explanation": explanation,
+        })
 
     return results
 

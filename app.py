@@ -70,12 +70,13 @@ def _get_explainer(force_offline: bool) -> VibeExplainer:
 
 @st.cache_data(show_spinner=False)
 def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
-             rag_on: bool, use_live: bool, one_per_genre: bool) -> tuple[list[dict], str, int]:
+             rag_on: bool, use_live: bool, one_per_genre: bool) -> tuple[list[dict], str, int, str | None]:
     """Run one fully-configured pipeline; cached on its plain inputs.
 
-    Returns (results, explainer_mode, catalog_size). When rag_on is False we skip
-    retrieval/generation entirely and return the raw recommender output (the
-    original behavior: score + rule-based reasons only).
+    Returns (results, explainer_mode, catalog_size, status). When rag_on is False we
+    skip retrieval/generation and return the raw recommender output (score + rule-
+    based reasons only). `status` is None unless live phrasing failed (e.g. a rate
+    limit) and fell back to offline, in which case it is a one-line message to show.
     """
     songs = _load_catalog(catalog_key)
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
@@ -88,48 +89,80 @@ def _compute(genre: str, mood: str, energy: float, k: int, catalog_key: str,
             "title": s["title"], "artist": s["artist"], "genre": s["genre"],
             "score": sc, "reasons": r, "explanation": None,
         } for s, sc, r in chosen]
-        return results, "score-only", len(songs)
+        return results, "score-only", len(songs), None
 
     notes = _load_corpus()
     client = _get_explainer(force_offline=not use_live)
-    results = []
+
+    # Retrieve for every pick, then explain them all in ONE batched call (a single
+    # API request in live mode, so a multi-song query stays under the rate limit).
+    retrieved = []
     for song, score, reasons in chosen:
         note, confidence, note_title = retrieve_note(song, notes)
+        retrieved.append((song, score, reasons, note, confidence, note_title))
+    items = [{"song": s, "score": sc, "reasons": r, "note": n}
+             for (s, sc, r, n, c, nt) in retrieved]
+    explanations, status = client.explain_batch(items, prefs)
+
+    results = []
+    for (song, score, reasons, note, confidence, note_title), explanation in zip(
+            retrieved, explanations):
         results.append({
             "title": song["title"], "artist": song["artist"], "genre": song["genre"],
-            "score": score, "reasons": reasons, "explanation": client.explain(
-                song, score, reasons, note, prefs),
+            "score": score, "reasons": reasons, "explanation": explanation,
             "confidence": confidence, "grounded": note is not None,
             "note_title": note_title,
         })
-    return results, client.mode, len(songs)
+    return results, client.mode, len(songs), status
 
 
 # ----------------------------------------------------------------------------
 # Rendering
 # ----------------------------------------------------------------------------
 
+def _render_card(rank: int, r: dict) -> None:
+    """Render one result card (with or without a RAG explanation)."""
+    with st.container(border=True):
+        head = st.columns([0.7, 0.3])
+        head[0].markdown(f"**{rank}. {r['title']}**  ·  {r['artist']}")
+        head[1].markdown(f"score **{r['score']:.2f}**")
+        st.caption("  ".join(f"`{reason}`" for reason in r["reasons"]))
+        # RAG mode carries an explanation; score-only mode does not.
+        if r.get("explanation"):
+            st.write(f"_{r['explanation']}_")
+            if r.get("grounded"):
+                st.caption(
+                    f"grounded on note '{r['note_title']}' "
+                    f"(retrieval confidence {r['confidence']:.2f})"
+                )
+            else:
+                st.caption("no note retrieved, score-only fallback (guardrail)")
+
+
 def _render_results(results: list[dict]) -> None:
-    """Render a list of result cards (with or without RAG explanations)."""
+    """Render a stacked list of result cards (used in Single view)."""
     if not results:
         st.warning("No songs to show.")
         return
     for rank, r in enumerate(results, start=1):
-        with st.container(border=True):
-            head = st.columns([0.7, 0.3])
-            head[0].markdown(f"**{rank}. {r['title']}** — {r['artist']}")
-            head[1].markdown(f"score **{r['score']:.2f}**")
-            st.caption("  ".join(f"`{reason}`" for reason in r["reasons"]))
-            # RAG mode carries an explanation; score-only mode does not.
-            if r.get("explanation"):
-                st.write(f"_{r['explanation']}_")
-                if r.get("grounded"):
-                    st.caption(
-                        f"grounded on note '{r['note_title']}' "
-                        f"(retrieval confidence {r['confidence']:.2f})"
-                    )
-                else:
-                    st.caption("no note retrieved — score-only fallback (guardrail)")
+        _render_card(rank, r)
+
+
+def _render_compare(res_a: list[dict], res_b: list[dict]) -> None:
+    """Render two result lists side by side, ROW BY ROW so rank 1 lines up with
+    rank 1, etc. Paired cards in a row stretch to equal height (via CSS), so the
+    two columns stay visually even even when one side's card is taller."""
+    if not res_a and not res_b:
+        st.warning("No songs to show.")
+        return
+    for i in range(max(len(res_a), len(res_b))):
+        row = st.columns(2)
+        with row[0]:
+            if i < len(res_a):
+                _render_card(i + 1, res_a[i])
+        with row[1]:
+            if i < len(res_b):
+                _render_card(i + 1, res_b[i])
 
 
 def _config_summary(cfg: dict, mode: str) -> str:
@@ -205,6 +238,13 @@ code {
   border: 1px solid var(--border) !important;
   border-radius: 14px;
   box-shadow: 0 1px 3px rgba(58,31,51,0.04);
+}
+
+/* In Compare mode, paired cards sit in a two-column row; stretch them to equal
+   height so the left and right cards line up evenly regardless of content length. */
+[data-testid="stHorizontalBlock"] { align-items: stretch; }
+[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlockBorderWrapper"] {
+  height: 100%;
 }
 
 [data-testid="stFormSubmitButton"] button {
@@ -290,27 +330,27 @@ def main() -> None:
     # Collapsible explainer, open by default. Explains both views and what each
     # toggle in Compare mode actually changes, so a first-time viewer understands
     # what is being compared and why it matters.
-    with st.expander("About VibeFinder — what you're looking at", expanded=True):
+    with st.expander("About VibeFinder: what you're looking at", expanded=True):
         st.markdown(
-            "**VibeFinder** started as a simple music recommender -- score each song on "
-            "genre, mood, and energy, and return a ranked list with terse rule-based "
-            "reasons -- and was extended with a **RAG explanation layer** that retrieves "
-            "a factual note about each pick and writes a grounded plain-language *why "
-            "this fits you*, plus an expanded and rebalanced song catalog.\n\n"
+            "**VibeFinder** started as a simple music recommender (it scores each song "
+            "on genre, mood, and energy, and returns a ranked list with terse rule-based "
+            "reasons). It was then extended with a **RAG explanation layer** that "
+            "retrieves a factual note about each pick and writes a grounded plain-language "
+            "*why this fits you*, plus an expanded and rebalanced song catalog.\n\n"
             "- **Single view** runs the finished system: the recommender plus RAG "
             "explanations, on the expanded 46-song catalog.\n"
             "- **Compare view** is a build-your-own A/B lab. The same taste profile is "
             "run through **two pipelines side by side**, and you flip each change "
             "independently on each side to see what it did:\n"
-            "    - **Catalog** — Original 20 vs Expanded 46 (rebalanced). Shows the "
-            "effect of fixing the pop/high-energy skew and the thin moods (e.g. a "
-            "*metal / intense* profile has no real match on 20 songs but a full match "
-            "on 46).\n"
-            "    - **RAG explanations** — off gives the terse score-only reasons; on "
+            "    - **Catalog:** Original 20 vs Expanded 46 (rebalanced). Shows the "
+            "effect of fixing the pop/high-energy skew and the thin moods. For example, "
+            "a *metal / intense* profile has no real match on 20 songs but a full match "
+            "on 46.\n"
+            "    - **RAG explanations:** off gives the terse score-only reasons; on "
             "gives the grounded natural-language explanation.\n"
-            "    - **Live AI phrasing** — offline deterministic wording vs Gemini-"
-            "written (needs a key).\n"
-            "    - **Genre variety** — cap the list to one song per genre.\n\n"
+            "    - **Live AI phrasing:** offline deterministic wording vs Gemini-written "
+            "(needs a key).\n"
+            "    - **Genre variety:** cap the list to one song per genre.\n\n"
             "The comparison is authentic: the score-only path is the untouched original "
             "recommender, and the 20-song catalog is the original data."
         )
@@ -321,30 +361,36 @@ def main() -> None:
 
     if view == "Single":
         with st.spinner("Finding your vibe..."):
-            results, mode, size = _compute(genre, mood, energy, k, "Expanded (46)",
-                                           single_rag, single_live, single_div)
+            results, mode, size, status = _compute(genre, mood, energy, k,
+                                                   "Expanded (46)", single_rag,
+                                                   single_live, single_div)
         mode_label = "Live (Gemini)" if mode == "live" else "Offline (deterministic)"
         st.info(f"Explainer mode: **{mode_label}**  |  catalog: {size} songs")
+        if status:
+            st.warning(status)
         # Full-width results, spanning the screen like the banner above.
         _render_results(results)
         return
 
     # Compare view: two independently-configured pipelines, same profile.
     with st.spinner("Running both pipelines..."):
-        res_a, mode_a, size_a = _compute(genre, mood, energy, k,
-                                         cfg_a["catalog_key"], cfg_a["rag_on"],
-                                         cfg_a["use_live"], cfg_a["one_per_genre"])
-        res_b, mode_b, size_b = _compute(genre, mood, energy, k,
-                                         cfg_b["catalog_key"], cfg_b["rag_on"],
-                                         cfg_b["use_live"], cfg_b["one_per_genre"])
+        res_a, mode_a, size_a, status_a = _compute(genre, mood, energy, k,
+                                                   cfg_a["catalog_key"], cfg_a["rag_on"],
+                                                   cfg_a["use_live"], cfg_a["one_per_genre"])
+        res_b, mode_b, size_b, status_b = _compute(genre, mood, energy, k,
+                                                   cfg_b["catalog_key"], cfg_b["rag_on"],
+                                                   cfg_b["use_live"], cfg_b["one_per_genre"])
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.info(_config_summary(cfg_a, mode_a) + f"  ·  {size_a} songs")
-        _render_results(res_a)
-    with col_b:
-        st.info(_config_summary(cfg_b, mode_b) + f"  ·  {size_b} songs")
-        _render_results(res_b)
+    # Show any live-fallback status once (both sides usually share the same message).
+    for msg in dict.fromkeys(s for s in (status_a, status_b) if s):
+        st.warning(msg)
+
+    # Config banners as a paired header row, then the results row by row so the
+    # two columns line up rank for rank with matching card heights.
+    head = st.columns(2)
+    head[0].info(_config_summary(cfg_a, mode_a) + f"  ·  {size_a} songs")
+    head[1].info(_config_summary(cfg_b, mode_b) + f"  ·  {size_b} songs")
+    _render_compare(res_a, res_b)
 
 
 if __name__ == "__main__":

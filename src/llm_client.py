@@ -193,12 +193,11 @@ class VibeExplainer:
             # rather than returning a blank line.
             return text or self._fallback(song, reasons)
         except Exception as e:
-            # Network/quota/model errors degrade to the deterministic fallback,
-            # tagged so it is visible in output/logs that live generation failed.
-            return (
-                self._fallback(song, reasons)
-                + f"  (live explanation unavailable: {type(e).__name__})"
-            )
+            # Network/quota/model errors degrade gracefully. Because we have the
+            # retrieved note here, we fall back to the GROUNDED offline stub (not the
+            # bare score-only line) and tag it so the reason is visible -- and the tag
+            # names a rate limit explicitly when that is what happened.
+            return self._explain_offline(song, reasons, note) + f"  ({self._short_tag(e)})"
 
     # ------------------------------------------------------------------
     # Shared helpers
@@ -235,3 +234,142 @@ class VibeExplainer:
         """
         title = song.get("title", "This song")
         return f"{title}: recommended on the score alone ({'; '.join(reasons)})."
+
+    # ------------------------------------------------------------------
+    # Error classification (so the UI can tell the user WHY live failed)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_rate_limit(e: Exception) -> bool:
+        """True when an exception looks like a quota / rate-limit (HTTP 429)."""
+        msg = str(e).lower()
+        return ("429" in msg or "resource_exhausted" in msg
+                or "quota" in msg or "rate limit" in msg)
+
+    @staticmethod
+    def _short_tag(e: Exception) -> str:
+        """Short inline tag appended to a single fallback explanation."""
+        if VibeExplainer._is_rate_limit(e):
+            return "live rate limit reached; showing offline explanation"
+        return f"live unavailable: {type(e).__name__}"
+
+    @staticmethod
+    def _status_message(e: Exception) -> str:
+        """One-line human status the UI can show as a banner when live fell back."""
+        if VibeExplainer._is_rate_limit(e):
+            return ("Live AI phrasing hit the Gemini free-tier rate limit (about 20 "
+                    "requests per minute). Showing the offline explanations instead; "
+                    "try again in a minute, or use fewer songs.")
+        return (f"Live AI phrasing was unavailable ({type(e).__name__}). Showing the "
+                "offline explanations instead.")
+
+    # ------------------------------------------------------------------
+    # Batched explanation: one API call for a whole result list
+    # ------------------------------------------------------------------
+
+    def explain_batch(self, items: list[dict], prefs: dict) -> tuple[list[str], str | None]:
+        """Explain a whole result list, returning (explanations, status).
+
+        `items` is a list of dicts, each with keys: song, score, reasons, note.
+        Explanations are returned aligned to `items`. `status` is None on success, or
+        a one-line human message when LIVE phrasing failed (e.g. rate limit) and we
+        fell back to the offline explanations.
+
+        Why batch: in live mode this sends ONE API call for the whole list instead of
+        one call per song, which keeps a multi-song query well under the free-tier
+        rate limit. Songs with no retrieved note never go to the model (the guardrail):
+        they get the score-only fallback directly.
+        """
+        explanations: list[str | None] = [None] * len(items)
+
+        # No-note songs: score-only fallback, never sent to the model.
+        for i, it in enumerate(items):
+            if not it.get("note"):
+                explanations[i] = self._fallback(it["song"], it["reasons"])
+        grounded = [i for i, it in enumerate(items) if it.get("note")]
+
+        # Offline (or nothing to ground): deterministic stub per grounded song.
+        if self.mode != "live" or not grounded:
+            for i in grounded:
+                it = items[i]
+                explanations[i] = self._explain_offline(
+                    it["song"], it["reasons"], it["note"])
+            return [e for e in explanations], None  # type: ignore
+
+        # Live: a single call for all grounded songs.
+        try:
+            text = self._batch_live_call(grounded, items, prefs)
+            parsed = self._parse_numbered(text, len(grounded))
+            for n, i in enumerate(grounded):
+                it = items[i]
+                # If the model skipped an item, fall back to its offline stub.
+                explanations[i] = parsed[n] or self._explain_offline(
+                    it["song"], it["reasons"], it["note"])
+            return [e for e in explanations], None  # type: ignore
+        except Exception as e:
+            # Whole-batch failure (e.g. rate limit): grounded offline stubs for all,
+            # plus a single status message the UI shows once.
+            for i in grounded:
+                it = items[i]
+                explanations[i] = self._explain_offline(
+                    it["song"], it["reasons"], it["note"])
+            return [e for e in explanations], self._status_message(e)  # type: ignore
+
+    def _batch_live_call(self, grounded: list[int], items: list[dict], prefs: dict) -> str:
+        """Build one prompt covering every grounded song and call Gemini once."""
+        blocks = []
+        for n, i in enumerate(grounded, start=1):
+            it = items[i]
+            blocks.append(
+                f'{n}. "{it["song"].get("title", "")}"\n'
+                f'   note: """{it["note"]}"""\n'
+                f'   why our recommender matched it: {", ".join(it["reasons"])}'
+            )
+        songs_block = "\n\n".join(blocks)
+
+        prompt = textwrap.dedent(
+            f"""
+            You explain, in two sentences each, why several songs were recommended to
+            a listener.
+
+            The listener's taste profile:
+              favorite genre: {prefs.get('favorite_genre')}
+              favorite mood:  {prefs.get('favorite_mood')}
+              target energy:  {prefs.get('target_energy')}
+
+            Rules:
+            - For each song, use ONLY the facts in that song's note. Do not invent
+              artists, awards, lyrics, chart positions, or anything not in the note.
+            - Frame it as a fit for THIS listener's stated taste, not as objectively good.
+            - Two sentences per song, plain and warm.
+
+            Return a numbered list with EXACTLY one entry per song, matching the numbers
+            below, in this format:
+            1. <explanation for song 1>
+            2. <explanation for song 2>
+
+            Songs:
+            {songs_block}
+            """
+        ).strip()
+
+        response = self._client.models.generate_content(
+            model=GEMINI_MODEL_NAME, contents=prompt)
+        text = (response.text or "").strip()
+        if not text:
+            raise RuntimeError("empty response from model")
+        return text
+
+    @staticmethod
+    def _parse_numbered(text: str, n: int) -> list[str | None]:
+        """Parse a numbered list into a list of n explanations (None if missing).
+
+        Matches entries that begin a line with 'N.' and captures everything up to the
+        next numbered entry, so a two-sentence explanation spanning lines is kept whole.
+        """
+        result: list[str | None] = [None] * n
+        for m in re.finditer(r"(?m)^\s*(\d+)\.\s*(.+?)(?=\n\s*\d+\.\s|\Z)", text, re.S):
+            idx = int(m.group(1)) - 1
+            if 0 <= idx < n:
+                result[idx] = " ".join(m.group(2).split())
+        return result
