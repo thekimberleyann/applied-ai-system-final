@@ -114,6 +114,76 @@ full 3.95 match on the 46-song one). The comparison is authentic, not mocked: th
 score-only path is the untouched Module 3 recommender and the 20-song catalog is the
 original data from git history.
 
+## The Inspector: showing the work
+
+A recommendation that says "trust me" teaches nothing. The Inspector opens the system
+up so a reader can see *why* it did what it did, and so someone who forks it can tell
+whether a change they made was an improvement or a regression.
+
+It answers two questions that are easy to confuse, and keeps them deliberately apart:
+
+1. **Why did this song rank here?** The deterministic recipe decided that, before any
+   model ran. No AI is involved.
+2. **Why was *this note* retrieved to explain it?** That is the retrieval half of RAG,
+   and it was previously only written to a log.
+
+Run it in the browser (`streamlit run app.py`, then pick **Inspector**), or in the
+terminal with no extra dependencies:
+
+```bash
+python -m src.inspect_cli
+python -m src.inspect_cli --song "Heavy Riff"
+python -m src.inspect_cli --genre metal --mood intense
+```
+
+**Panel 1, the ranking.** Every song scored, itemized into its three terms, with the
+top-k cut drawn in and the near misses below it. Answering "why this one over the
+rest" requires showing the rest, and the near misses are where the recipe is easiest
+to read: a 3.92 losing to a 3.95 says more about the weights than the winner does.
+
+**Panel 2, the retrieval scoreboard.** Every note scored against the song, ordered by
+raw token overlap, with the `MIN_CONFIDENCE` floor marked. This is the debugging step
+the RAG literature insists on: print the retrieved chunks before blaming the model.
+
+The scoreboard is ordered by overlap rather than by what the retriever actually chose,
+and that is the point. `retrieve_note` applies an exact-title tiebreak on top of
+overlap, so the two orderings can disagree, and the Inspector shows when they do. It
+distinguishes two cases that look alike and are not:
+
+- a **tie** broken by title, which any tiebreak rule would have to resolve somehow
+- a **strict override**, where a different note genuinely scored higher and the song's
+  own note would have lost
+
+On the shipped catalog 15 of 46 songs trigger an override but only 3 are strict
+(Heavy Riff, Halcyon Drift, Delta Dust). Reporting all 15 as retrieval failures would
+overstate the problem fivefold. The 3 strict cases are the honest evidence that token
+overlap alone mis-retrieves: Heavy Riff's own note scores 0.50 while Concrete Anthem's
+scores 0.75, because that note happens to contain the word "heavy". The exact-title
+tiebreak is what rescues it, which makes that tiebreak a hand-rolled reranker.
+
+**Panel 3, the prompt.** The exact string the model would receive. It is built even
+with no API key, because assembling it is a pure function with no side effects, so
+this panel stays visible in the offline configuration every reviewer runs. Seeing it
+makes one thing concrete that no diagram does: retrieval's whole job is to paste the
+right text into the prompt for you, on every call.
+
+**Design constraints.** The Inspector reads the same functions the real run uses and
+recomputes nothing, so it cannot disagree with the system it describes: a test pins
+the scoreboard's winner against `retrieve_note` across all 46 songs. It is read-only,
+and another test pins that a run's output is identical whether or not it was
+inspected, which is the same shape as the guardrail that the explainer never re-ranks.
+`retrieve_note` itself was not modified; `score_all_notes` was added alongside it.
+
+**It found a real bug on its first run.** The prompt panel revealed that every live
+call this project had ever made was sending a raggedly indented prompt.
+`textwrap.dedent` was running *after* f-string interpolation, and since every corpus
+note is two lines whose second line is unindented, dedent computed a common prefix of
+nothing and stripped nothing. A single-line note dedented correctly, which is why it
+went unnoticed. Templates are now dedented once at import, before substitution, and a
+regression test pins the layout against a multi-line note. That is the argument for
+this whole feature in one incident: the defect was invisible until the prompt was
+printed.
+
 ## Sample Interactions (RAG output, captured from `python -m src.main`)
 
 Full captured run: [`assets/sample_run.txt`](assets/sample_run.txt).
