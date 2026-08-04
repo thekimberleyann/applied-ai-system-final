@@ -181,6 +181,29 @@ def test_prompt_contains_the_retrieved_note_and_nothing_invented():
     assert record["retrieval"]["picked_note"] in record["prompt"]
 
 
+def test_multiline_note_cannot_break_the_prompt_layout():
+    """Regression: dedent used to run AFTER interpolation.
+
+    Because every corpus note is two lines and the second line is unindented,
+    dedent computed a common prefix of "" and stripped nothing, so the whole
+    prompt shipped to the model with its source indentation attached. A
+    single-line note dedented correctly, which is why it went unnoticed. The
+    template is now dedented once at import, before substitution, so the layout
+    cannot depend on the note's shape.
+    """
+    one_line = build_explain_prompt(["genre match (+2.0)"], "One line.", PREFS)
+    multi_line = build_explain_prompt(
+        ["genre match (+2.0)"], "Line one.\nLine two, unindented.", PREFS
+    )
+
+    for prompt in (one_line, multi_line):
+        # The structural lines of the template must sit flush against the left
+        # margin in both cases; only the template's own nesting may indent.
+        assert "\nThe listener's taste profile:" in prompt
+        assert "\nRules:" in prompt
+        assert "\n  favorite genre: pop" in prompt
+
+
 def test_prompt_is_deterministic():
     reasons = ["genre match (+2.0)"]
     a = build_explain_prompt(reasons, "A note.", PREFS)

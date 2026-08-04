@@ -33,6 +33,68 @@ import textwrap
 GEMINI_MODEL_NAME = "gemini-flash-latest"
 
 
+# Prompt templates are dedented ONCE, at import, BEFORE any value is substituted.
+#
+# This ordering is the whole point. The original code called textwrap.dedent on an
+# f-string, which meant dedent ran AFTER interpolation and therefore saw the
+# retrieved note's own lines. Every note in the corpus is two lines whose second
+# line has no indentation, so dedent computed a common prefix of "" and stripped
+# nothing, and the entire prompt went to the model with its source indentation
+# still attached. The bug was invisible until the glass box printed the prompt.
+#
+# Dedenting the template first makes the layout independent of what gets
+# substituted into it, so no note, however formatted, can break it again.
+_EXPLAIN_TEMPLATE = textwrap.dedent(
+    """
+    You explain, in two sentences, why a song was recommended to a listener.
+
+    The listener's taste profile:
+      favorite genre: {genre}
+      favorite mood:  {mood}
+      target energy:  {energy}
+
+    The only facts you may use about the song are in this note:
+    \"\"\"{note}\"\"\"
+
+    Why our recommender matched it (already decided, do not re-rank):
+    {reasons}
+
+    Rules:
+    - Use ONLY facts stated in the note. Do not invent artists, awards,
+      lyrics, chart positions, or anything not written above.
+    - Do not claim the song is objectively good; frame it as a fit for THIS
+      listener's stated taste.
+    - Keep it to two sentences, plain and warm.
+    """
+).strip()
+
+_BATCH_TEMPLATE = textwrap.dedent(
+    """
+    You explain, in two sentences each, why several songs were recommended to
+    a listener.
+
+    The listener's taste profile:
+      favorite genre: {genre}
+      favorite mood:  {mood}
+      target energy:  {energy}
+
+    Rules:
+    - For each song, use ONLY the facts in that song's note. Do not invent
+      artists, awards, lyrics, chart positions, or anything not in the note.
+    - Frame it as a fit for THIS listener's stated taste, not as objectively good.
+    - Two sentences per song, plain and warm.
+
+    Return a numbered list with EXACTLY one entry per song, matching the numbers
+    below, in this format:
+    1. <explanation for song 1>
+    2. <explanation for song 2>
+
+    Songs:
+    {songs_block}
+    """
+).strip()
+
+
 def build_explain_prompt(reasons: list[str], note: str, prefs: dict) -> str:
     """Assemble the single-song explanation prompt. Pure: no I/O, no API call.
 
@@ -48,29 +110,13 @@ def build_explain_prompt(reasons: list[str], note: str, prefs: dict) -> str:
     authority. The reasons are labelled as already decided precisely so the model
     treats the ranking as fixed input rather than something to re-litigate.
     """
-    return textwrap.dedent(
-        f"""
-        You explain, in two sentences, why a song was recommended to a listener.
-
-        The listener's taste profile:
-          favorite genre: {prefs.get('favorite_genre')}
-          favorite mood:  {prefs.get('favorite_mood')}
-          target energy:  {prefs.get('target_energy')}
-
-        The only facts you may use about the song are in this note:
-        \"\"\"{note}\"\"\"
-
-        Why our recommender matched it (already decided, do not re-rank):
-        {', '.join(reasons)}
-
-        Rules:
-        - Use ONLY facts stated in the note. Do not invent artists, awards,
-          lyrics, chart positions, or anything not written above.
-        - Do not claim the song is objectively good; frame it as a fit for THIS
-          listener's stated taste.
-        - Keep it to two sentences, plain and warm.
-        """
-    ).strip()
+    return _EXPLAIN_TEMPLATE.format(
+        genre=prefs.get("favorite_genre"),
+        mood=prefs.get("favorite_mood"),
+        energy=prefs.get("target_energy"),
+        note=note,
+        reasons=", ".join(reasons),
+    )
 
 
 class VibeExplainer:
@@ -352,31 +398,12 @@ class VibeExplainer:
             )
         songs_block = "\n\n".join(blocks)
 
-        prompt = textwrap.dedent(
-            f"""
-            You explain, in two sentences each, why several songs were recommended to
-            a listener.
-
-            The listener's taste profile:
-              favorite genre: {prefs.get('favorite_genre')}
-              favorite mood:  {prefs.get('favorite_mood')}
-              target energy:  {prefs.get('target_energy')}
-
-            Rules:
-            - For each song, use ONLY the facts in that song's note. Do not invent
-              artists, awards, lyrics, chart positions, or anything not in the note.
-            - Frame it as a fit for THIS listener's stated taste, not as objectively good.
-            - Two sentences per song, plain and warm.
-
-            Return a numbered list with EXACTLY one entry per song, matching the numbers
-            below, in this format:
-            1. <explanation for song 1>
-            2. <explanation for song 2>
-
-            Songs:
-            {songs_block}
-            """
-        ).strip()
+        prompt = _BATCH_TEMPLATE.format(
+            genre=prefs.get("favorite_genre"),
+            mood=prefs.get("favorite_mood"),
+            energy=prefs.get("target_energy"),
+            songs_block=songs_block,
+        )
 
         response = self._client.models.generate_content(
             model=GEMINI_MODEL_NAME, contents=prompt)
