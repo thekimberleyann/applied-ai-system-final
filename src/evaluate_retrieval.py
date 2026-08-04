@@ -209,14 +209,27 @@ def main() -> None:
 
     loo = leave_one_out(songs, notes)
     print("\nLEAVE-ONE-OUT (each song's own note removed)")
-    print(f"  {loo['leaked']} of {loo['songs']} songs still ground on ANOTHER song's note.")
-    print(f"  The floor would have to exceed {loo['floor_needed']:.2f} to stop them,")
-    print(f"  which is above most CORRECT retrievals, so raising it is not the fix.")
-    for conf, song, picked in loo["worst"]:
-        print(f"    {song:<22} -> {picked:<22} {conf:.2f}")
-    print("\n  Meaning: the floor only rejects input alien to the whole corpus.")
-    print("  A catalog row whose note was never written is NOT alien, so it is")
-    print("  explained using another song's facts, with no warning.")
+    print(f"  {loo['leaked']} of {loo['songs']} songs ground on ANOTHER song's note.")
+
+    if loo["leaked"] == 0:
+        print("\n  The metadata filter is holding. Every song whose own note is")
+        print("  missing now falls back to a score-only reason instead of being")
+        print("  explained with a different song's facts.")
+        print("\n  This was not always true. Before the filter, all 46 songs leaked,")
+        print("  matching siblings at 0.60 to 0.80 against a floor of 0.15, because")
+        print("  sibling notes share genre and mood vocabulary. No threshold could")
+        print("  separate them: correct margins spanned 0.00 to 0.50 and wrong ones")
+        print("  0.00 to 0.40, so 44 of 46 correct cases sat inside the wrong range.")
+        print("  The fix was to stop asking the score a question it cannot answer.")
+        print("  Similarity finds candidates; identity decides eligibility.")
+    else:
+        print(f"  The floor would have to exceed {loo['floor_needed']:.2f} to stop them,")
+        print("  which is above most CORRECT retrievals, so raising it is not the fix.")
+        for conf, song, picked in loo["worst"]:
+            print(f"    {song:<22} -> {picked:<22} {conf:.2f}")
+        print("\n  Meaning: the floor only rejects input alien to the whole corpus.")
+        print("  A catalog row whose note was never written is NOT alien, so it is")
+        print("  explained using another song's facts, with no warning.")
 
 
 if __name__ == "__main__":

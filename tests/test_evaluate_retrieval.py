@@ -19,7 +19,7 @@ from src.evaluate_retrieval import (
     reciprocal_rank,
 )
 from src.recommender import load_songs
-from src.retriever import MIN_CONFIDENCE, load_notes, retrieve_note
+from src.retriever import MIN_CONFIDENCE, load_notes, missing_notes, retrieve_note
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 
@@ -122,23 +122,48 @@ def test_confidence_floor_has_headroom_over_correct_retrievals():
         assert confidence > MIN_CONFIDENCE, f"{song['title']} at {confidence}"
 
 
-def test_leave_one_out_documents_the_guardrail_gap():
-    """The floor does NOT protect a catalog song whose note is missing.
+def test_a_song_with_no_note_of_its_own_falls_back():
+    """The guardrail the metadata filter restored.
 
-    This test asserts a WEAKNESS, deliberately, so it is recorded rather than
-    rediscovered. With its own note removed, every song still retrieves a
-    sibling's note well above the floor, because sibling notes share genre and
-    mood vocabulary. The score-only fallback never fires for catalog-shaped
-    input; it only catches text alien to the entire corpus.
+    History, because the numbers make the case: before the filter, deleting a
+    song's own note left all 46 catalog songs still retrieving a SIBLING's note
+    at 0.60 to 0.80, far above the 0.15 floor, and being explained with another
+    song's facts at high reported confidence. No threshold could fix that.
+    Correct retrievals span margins of 0.00 to 0.50 and wrong ones 0.00 to 0.40,
+    so 44 of 46 correct cases sat inside the wrong-case range.
 
-    If someone fixes this (for example by requiring an exact title match, or by
-    warning when the retrieved note is not the song's own), this test SHOULD
-    fail. Update it then, with the fix.
+    The fix filters on identity rather than on the score. This test is the
+    regression pin: leave-one-out must now leak nothing.
     """
     songs, notes = _catalog(), _notes()
     result = leave_one_out(songs, notes)
 
-    assert result["leaked"] == result["songs"]
-    # Raising the floor is not a viable fix: it would have to clear 0.80, which
-    # is above most correct retrievals.
-    assert result["floor_needed"] > 0.5
+    assert result["leaked"] == 0, f"{result['leaked']} songs grounded on a wrong note"
+
+
+def test_missing_notes_reports_the_gap_at_load_time():
+    """A song added without a note must be reportable BEFORE retrieval runs.
+
+    This is the other half of the fix. The filter makes the failure safe; this
+    makes it visible, because the realistic cause is a song added to songs.csv
+    with no matching entry in song_notes.md.
+    """
+    songs, notes = _catalog(), _notes()
+
+    # The shipped corpus is complete.
+    assert missing_notes(songs, notes) == []
+
+    # Remove one note and it must be named.
+    trimmed = {k: v for k, v in notes.items() if k != songs[0]["title"]}
+    assert missing_notes(songs, trimmed) == [songs[0]["title"]]
+
+
+def test_a_song_missing_its_note_is_not_grounded():
+    """End to end: no note of its own means no grounded explanation."""
+    songs, notes = _catalog(), _notes()
+    song = songs[0]
+    trimmed = {k: v for k, v in notes.items() if k != song["title"]}
+
+    note, _confidence, picked = retrieve_note(song, trimmed)
+    assert note is None
+    assert picked is None

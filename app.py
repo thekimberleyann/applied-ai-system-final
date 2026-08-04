@@ -34,7 +34,7 @@ from src.glassbox import inspect_song, rank_table
 from src.llm_client import VibeExplainer
 from src.main import _load_dotenv_if_present
 from src.recommender import load_songs, recommend_songs
-from src.retriever import load_notes, retrieve_note
+from src.retriever import load_notes, missing_notes, retrieve_note
 
 _HERE = os.path.dirname(__file__)
 
@@ -301,6 +301,22 @@ code {
 """
 
 
+def _warn_missing_notes(songs: list[dict], notes: dict) -> None:
+    """Announce catalog songs that have no note of their own.
+
+    The corpus is the retrieval system's whole knowledge, so a gap in it is a
+    data problem. Those songs still get recommended and still get score-only
+    reasons; they simply cannot be grounded. Saying so here is cheaper than a
+    user wondering why one card reads differently from the others.
+    """
+    gaps = missing_notes(songs, notes)
+    if gaps:
+        st.warning(
+            f"{len(gaps)} song(s) have no note and cannot be grounded: "
+            f"{', '.join(gaps)}. They will fall back to score-only reasons."
+        )
+
+
 def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
     """The glass box: show the work behind one run.
 
@@ -319,6 +335,7 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
     songs = _load_catalog("Expanded (46)")
     notes = _load_corpus()
+    _warn_missing_notes(songs, notes)
 
     # --- Panel 1: the ranking ------------------------------------------------
     st.subheader("Why this order")
@@ -549,6 +566,7 @@ def main() -> None:
                                                    single_live, single_div)
         mode_label = "Live (Gemini)" if mode == "live" else "Offline (deterministic)"
         st.info(f"Explainer mode: **{mode_label}**  |  catalog: {size} songs")
+        _warn_missing_notes(_load_catalog("Expanded (46)"), _load_corpus())
         if status:
             st.warning(status)
         # Full-width results, spanning the screen like the banner above.

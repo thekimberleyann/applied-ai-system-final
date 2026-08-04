@@ -190,7 +190,55 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     # so it falls here to the guardrail path.
     if best_note is None or best_conf < MIN_CONFIDENCE:
         return (None, best_conf, None)
+
+    # METADATA FILTER. Similarity finds candidates; IDENTITY decides eligibility.
+    #
+    # This exists because measurement showed the floor could not do this job.
+    # With a song's own note deleted, all 46 catalog songs still retrieved a
+    # sibling's note at 0.60 to 0.80, because sibling notes share genre and mood
+    # vocabulary. A confidence threshold cannot separate those cases: correct
+    # retrievals span margins of 0.00 to 0.50 and wrong ones 0.00 to 0.40, so 44
+    # of 46 correct cases sit inside the wrong-case range. There is no cutoff.
+    # See src/evaluate_retrieval.py, which produces those numbers.
+    #
+    # The reason no threshold works is that a similarity score answers "is this
+    # note similar" when the question is "is this note ABOUT this song". Those
+    # are different questions, and the corpus already answers the second one: it
+    # is keyed one note per song, so correctness IS title identity.
+    #
+    # So we filter on metadata rather than on the score, which is what a
+    # production vector store does when it constrains retrieved candidates by
+    # tenant, permission, or date. The ranked search above still does real work:
+    # it produces the confidence number, and the full board that
+    # score_all_notes exposes to the Inspector. It just no longer gets the final
+    # say on whether a note is allowed to ground an explanation.
+    #
+    # Practical effect: with a complete corpus, none. Every song has its own
+    # note, so this filter never fires and output is unchanged. It matters when
+    # someone adds a row to songs.csv and forgets to write its note, which
+    # previously produced a confident explanation built from a DIFFERENT song's
+    # facts. Now that song falls back to a score-only reason, which is the
+    # honest answer.
+    if best_title != song_title:
+        return (None, best_conf, None)
+
     return (best_note, best_conf, best_title)
+
+
+def missing_notes(songs: list[dict], notes: dict[str, str]) -> list[str]:
+    """Catalog songs that have no note of their own, in catalog order.
+
+    The corpus is the retrieval system's entire knowledge, so a gap in it is a
+    data problem, not a model problem. Callers use this at load time to say so
+    out loud: a missing note is almost always an oversight (a song added to the
+    CSV without a corresponding entry in song_notes.md), and it silently costs
+    that song its grounded explanation.
+
+    Kept separate from retrieval so it can be reported once at startup rather
+    than discovered one song at a time, and so a caller can decide for itself
+    whether a gap is a warning or a hard error.
+    """
+    return [s["title"] for s in songs if s.get("title") not in notes]
 
 
 def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:

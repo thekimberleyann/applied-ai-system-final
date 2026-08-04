@@ -29,6 +29,7 @@ import os
 from src.explain import explain_recommendations, format_block, load_corpus
 from src.llm_client import VibeExplainer
 from src.recommender import load_songs, recommend_songs
+from src.retriever import missing_notes
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "songs.csv")
 
@@ -173,6 +174,17 @@ def main() -> None:
     notes = load_corpus()
     client = VibeExplainer()
     print(f"RAG explainer mode: {client.mode}  |  notes loaded: {len(notes)}")
+
+    # Corpus coverage check. The corpus IS the retrieval system's knowledge, so a
+    # gap in it is a data problem and should be announced, not discovered later.
+    # The realistic cause is a song added to songs.csv whose note was never
+    # written in song_notes.md. Those songs still get recommended and still get a
+    # score-only reason; they just cannot be grounded, and saying so here is
+    # cheaper than wondering why one recommendation reads differently.
+    gaps = missing_notes(songs, notes)
+    if gaps:
+        print(f"WARNING: {len(gaps)} song(s) have no note and cannot be grounded: "
+              f"{', '.join(gaps)}")
     print()
 
     # 1. Default run, now WITH grounded RAG explanations (the AI feature in action).
