@@ -113,7 +113,15 @@ A user's taste profile has three preferences, which songs are matched against:
 VibeFinder scores every song against your taste profile (favorite genre,
 favorite mood, and a target energy from 0.0 to 1.0), then ranks the highest
 scorers. A song's score is the sum of exactly three terms, for a maximum of
-**4.0 points** (2.0 + 1.0 + 1.0):
+**4.0 points** (2.0 + 1.0 + 1.0).
+
+The three weights below are the shipped defaults, and since Project 5 they live in
+`ScoringConfig` in [`src/config.py`](src/config.py) rather than as literals inside
+`score_song`. They are editable at runtime from the Inspector's knob panel in the
+Streamlit app, which never writes them back. Note that the 0.0 to 4.0 scale is simply
+what 2.0 + 1.0 + 1.0 adds up to and nothing is renormalized, so changing a weight
+changes the ceiling; the reasons-sum-to-the-score guarantee below holds under any
+weighting, and a test pins that. The terms:
 
 - **Genre match (+2.0).** The song's genre must exactly equal your
   `favorite_genre`. It is all-or-nothing: +2.0 on an exact match, otherwise 0.
@@ -182,7 +190,9 @@ python -m src.main
 The default profile (genre pop, mood happy, target energy 0.8) produces this ranking.
 Three pop/happy songs tie on genre and mood, so the energy-closeness term alone orders
 them: Summer Anthem (energy 0.80, right on the target) edges out Sunshine Pop (0.85)
-and Confetti Skies (0.72):
+and Confetti Skies (0.72). Since Project 5, `python -m src.main` prints this block
+tagged `[RAG]` with an explanation line under each song; to see the same ranking
+score-only, itemized term by term, run `python -m src.inspect_cli` and read Panel 1:
 
 ```
 Loaded songs: 46
@@ -259,12 +269,17 @@ recipe.
 
 - **A cap of 2 was dead code on the original catalog, and the catalog SIZE is what
   changed that.** On the original 20-song catalog every genre had at most 2 songs, so
-  across all 231 (genre, mood, energy) profiles no top-5 ever held 3 of one genre and
-  a cap of 2 could never fire -- it was dead code, and only a cap of 1 did anything.
-  After Project 5 expanded the catalog to 46 songs, several genres have 3 entries, so
-  the default pop/happy top-5 now holds THREE pop songs and a cap of 2 fires (it drops
-  the third pop song). The lesson is that the knob's usefulness was gated by catalog
-  size, not by the algorithm -- which is exactly why a bigger, balanced catalog matters.
+  across all 2178 swept (genre, mood, energy) profiles no top-5 ever held 3 of one
+  genre and a cap of 2 could never fire -- it was dead code, and only a cap of 1 did
+  anything. After Project 5 expanded the catalog to 46 songs, eight genres carry 3
+  entries and 968 of the 2299 swept profiles produce a top-5 holding 3 of one genre,
+  so the default pop/happy top-5 now holds THREE pop songs and a cap of 2 fires (it
+  drops the third pop song). The lesson is that the knob's usefulness was gated by
+  catalog size, not by the algorithm -- which is exactly why a bigger, balanced catalog
+  matters. Both sweep numbers come from `python -m src.sweep`, which prints its grid
+  size with the results: an earlier hand-counted figure here went stale the moment the
+  catalog grew, and could not be re-derived because the script that produced it was
+  never committed.
 - **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop (3.95)
   and Confetti Skies (3.92), two genuine pop/happy matches, and promotes Velvet Hustle
   at 2.00 -- a disco song that matches the listener's mood but NOT their genre. That is
