@@ -44,12 +44,29 @@ reviewer) and upgrades to a live model only when `GEMINI_API_KEY` is set.
 - **Orchestrate** (`src/explain.py`): ties recommend -> retrieve -> explain together,
   logs one line per recommendation (confidence, mode, whether it was grounded), and
   returns structured results.
+- **Measure** (`src/evaluate_retrieval.py`): scores the retrieval step itself with
+  hit@1, hit@3 and MRR against a gold set derived from the corpus, and runs a
+  leave-one-out check for whether a song can be explained with another song's note.
+  Run `python -m src.evaluate_retrieval` for the current numbers.
+- **Configure** (`src/config.py`): the scoring weights and the four retrieval knobs
+  (confidence floor, exact-title tiebreak, stopword filtering, metadata filter) are
+  frozen dataclasses rather than literals, so each one can be varied and measured
+  with `python -m src.evaluate_retrieval --compare`.
 
 **The central guardrail: the LLM explains, it never re-ranks.** The deterministic
-score is decided before the explainer ever runs and is only read, never changed. If
-retrieval finds no note above the confidence floor, the system falls back to a
-score-only explanation instead of describing a song it has no facts for. Both
-properties are pinned by tests.
+score is decided before the explainer ever runs and is only read, never changed.
+
+**The grounding guardrail: a note may only explain the song it is about.** A
+retrieved note has to pass two gates before it reaches the model. The confidence
+floor rejects a note nothing matched, and then a metadata filter in `retrieve_note`
+rejects a note whose title is not this song's title. The identity filter is the one
+that does the real work: measurement showed the floor alone never fired for any real
+song, because with its own note removed every one of the 46 catalog songs still
+retrieved a sibling's note at 0.60 to 0.80, well above the 0.15 floor. Similarity
+finds candidates; identity decides eligibility. When either gate rejects, the system
+falls back to a score-only explanation instead of describing a song it has no facts
+for. All three properties are pinned by tests, and the leave-one-out leak count is
+reported by `python -m src.evaluate_retrieval`.
 
 ## Architecture Overview
 
@@ -58,7 +75,8 @@ The system is two layers. The **deterministic core** (unchanged from Module 3) l
 **RAG layer** takes that already-ranked list and attaches an explanation to each pick:
 the retriever pulls the relevant note from `data/song_notes.md`, and the explainer
 (offline stub or live Gemini) phrases a grounded "why," falling back to score-only if
-no note is confident enough. Automated tests and human review sit on the output to
+no note clears the confidence floor or if the best note is not this song's own.
+Automated tests and human review sit on the output to
 confirm the explainer never changed the ranking and never invented facts. The full
 diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd)
 (rendered below).
@@ -73,8 +91,17 @@ pip install -r requirements.txt
 # Default: runs fully offline, deterministic, no API key needed.
 python -m src.main
 
-# Run the tests (138 tests, all offline).
+# Run the tests (all offline; the suite prints its own count).
 python -m pytest
+
+# Measure the retrieval step: hit@1, hit@3, MRR, and the leave-one-out leak count.
+python -m src.evaluate_retrieval
+
+# The same metrics with one knob changed per row, so each knob's cost is visible.
+python -m src.evaluate_retrieval --compare
+
+# Re-derive the catalog-wide sweep numbers quoted in DESIGN.md.
+python -m src.sweep
 
 # Optional live mode: set a key to have Gemini phrase the explanations.
 # (Offline stub is used automatically if this is unset or google-genai is absent.)
@@ -104,15 +131,19 @@ streamlit run app.py
 Like the CLI, it runs offline by default and uses live Gemini automatically if a key
 is present (shell env var or a local `.env`). A mode banner shows which is active.
 
-It has two views. **Single** runs the finished system. **Compare** is a build-your-own
-A/B lab: the same taste profile is run through two independently-configured pipelines
-side by side -- each side toggles the catalog (Original 20 vs Expanded 46), RAG on/off
-(grounded explanations vs original score-only reasons), live vs offline phrasing, and
-genre variety. It makes the effect of each Project 5 change visible at a glance (for
-example, a `metal / intense` profile has no real match on the 20-song catalog but a
-full 3.95 match on the 46-song one). The comparison is authentic, not mocked: the
-score-only path is the untouched Module 3 recommender and the 20-song catalog is the
-original data from git history.
+It has three views. **Single** runs the finished system. **Compare** is a
+build-your-own A/B lab: the same taste profile is run through two
+independently-configured pipelines side by side -- each side toggles the catalog
+(Original 20 vs Expanded 46), RAG on/off (grounded explanations vs original score-only
+reasons), live vs offline phrasing, and genre variety. It makes the effect of each
+Project 5 change visible at a glance (for example, at the app's default target energy
+of 0.80 a `metal / intense` profile has no genre+mood match at all on the 20-song
+catalog, where the best is Iron Fury at 2.82 on genre alone, but a full three-term
+match on the 46-song one, Furnace Heart at 3.85). The comparison is authentic, not
+mocked: the score-only path is the untouched Module 3 recommender and the 20-song
+catalog is the original data from git history. **Inspector** is the glass box,
+described in the next section; it also carries an editable-knob panel over the
+defaults in `src/config.py`.
 
 ## The Inspector: showing the work
 
@@ -166,6 +197,17 @@ with no API key, because assembling it is a pure function with no side effects, 
 this panel stays visible in the offline configuration every reviewer runs. Seeing it
 makes one thing concrete that no diagram does: retrieval's whole job is to paste the
 right text into the prompt for you, on every call.
+
+**Panel 0, the knobs (browser only).** The Inspector opens on the ranking, but a
+collapsed panel above it exposes the shipped configuration from `src/config.py` as
+live controls: the three scoring weights, the confidence floor, the exact-title
+tiebreak and stopword filtering. They are runtime only. Both default configs are
+frozen dataclasses, the panel builds throwaway copies for one page render, nothing is
+written to disk, and a test pins that the UI never assigns to the shipped defaults.
+The metadata filter is exposed too, but deliberately separated and labelled fault
+injection rather than a setting: turning it off does not relax the grounding
+guardrail, it restores the already-fixed bug. What each knob costs is measured, not
+guessed: run `python -m src.evaluate_retrieval --compare` for one row per knob.
 
 **Design constraints.** The Inspector reads the same functions the real run uses and
 recomputes nothing, so it cannot disagree with the system it describes: a test pins
@@ -232,8 +274,12 @@ genre but not mood, #3 matches mood but not genre:
 ```
 
 **Example 3 -- the guardrail firing (song with no note).** When retrieval finds no
-note above the confidence floor, the system refuses to describe the song and falls
-back to a score-only line (captured in [`assets/guardrail_demo.txt`](assets/guardrail_demo.txt)):
+note it is allowed to use, the system refuses to describe the song and falls back to a
+score-only line. This capture is the floor case: an off-catalog song whose best
+overlap is 0.00 (in [`assets/guardrail_demo.txt`](assets/guardrail_demo.txt)). The
+identity case looks the same from outside but reports a HIGH confidence, because a
+sibling note matched well and was rejected anyway for not being this song's note;
+`python -m src.evaluate_retrieval` counts those under leave-one-out:
 
 ```
 Retrieval for a song with no note:
@@ -251,6 +297,11 @@ The RAG run ends with a reliability summary, and the test suite pins the guarant
 Guardrail: any recommendation with no note above the confidence floor falls back to a score-only explanation instead of inventing details.
 ```
 
+Note that the summary line above reports the confidence floor only, which is the
+narrower of the two grounding gates. The identity filter is the one that actually
+holds; see the grounding guardrail above, and the leave-one-out section of
+`python -m src.evaluate_retrieval` for the measurement.
+
 ```
 $ python -m pytest -q
 138 passed
@@ -263,8 +314,15 @@ $ python -m pytest -q
 | Offline explanation is deterministic | `test_explain.py` | Pass |
 | Explanation is grounded in the note (no decimal/initial truncation) | `test_explain.py` | Pass |
 | LLM layer never re-ranks (order + scores unchanged) | `test_explain.py` | Pass |
+| Retrieval quality is measured, not assumed (hit@k, MRR, floor headroom) | `test_evaluate_retrieval.py` | Pass |
+| A song missing its own note is never explained with another song's note | `test_evaluate_retrieval.py` | Pass |
+| The exact-title tiebreak is load-bearing, not decoration | `test_evaluate_retrieval.py` | Pass |
+| The Inspector agrees with `retrieve_note` and does not perturb a run | `test_glassbox.py` | Pass |
+| Shipped defaults, and the reasons-sum guarantee under ANY weights | `test_config.py` | Pass |
 
-Test log: [`assets/pytest_summary.txt`](assets/pytest_summary.txt).
+Test log: [`assets/pytest_summary.txt`](assets/pytest_summary.txt). The suite prints
+its own count, so re-run `python -m pytest -q` rather than trusting the number quoted
+here; the numbers in this README have gone stale before precisely by being retyped.
 
 ## Design Decisions and Trade-offs
 
@@ -275,8 +333,18 @@ Test log: [`assets/pytest_summary.txt`](assets/pytest_summary.txt).
   unreproducible for a grader. The deterministic stub means the system, its output,
   and its tests are identical on any machine; live Gemini is a strict upgrade, not a
   dependency. Trade-off: the offline wording is templated rather than fluent.
-- **Token-overlap retrieval, not embeddings.** For a 20-song catalog, embeddings would
-  be gold plating. A transparent overlap score is easy to log, test, and reason about.
+- **Token-overlap retrieval, not embeddings.** For a catalog this size, embeddings
+  would be gold plating. A transparent overlap score is easy to log, test, and reason
+  about. This is no longer just an assertion: `src/evaluate_retrieval.py` measures it,
+  and overlap alone puts a song's own note first in 0.674 of cases, which is what
+  justifies the exact-title tiebreak that lifts hit@1 to 1.000. Re-derive both numbers
+  with `python -m src.evaluate_retrieval`.
+- **Filter on identity, not on the score.** The confidence floor was originally meant
+  to stop ungrounded explanations, and measurement showed it could not: correct and
+  incorrect retrievals overlap so heavily that no threshold separates them. Since the
+  corpus is keyed one note per song, correctness IS title identity, so `retrieve_note`
+  checks that instead. This is what a production vector store does when it constrains
+  candidates by tenant or permission.
 - **Explain, never re-rank.** Keeping the LLM strictly downstream is what makes the
   system auditable: the ranking is always the deterministic recipe, and a test proves
   the explainer cannot change it.
@@ -311,9 +379,12 @@ the valence-arousal basis for the mood quadrant).
 
 ## Testing Summary
 
-62 automated tests pass (up from 50 in Module 3): the original 50 recipe/evaluation/
-diversity tests plus 12 new ones for retrieval, grounding, the guardrail fallback, and
-the no-re-rank guarantee. What worked: the offline stub made the whole feature testable
+138 automated tests pass (up from 50 in Module 3), all offline. The original 50
+recipe/evaluation/diversity tests are joined by 12 for retrieval, grounding, the
+guardrail fallback and the no-re-rank guarantee, 16 for the Inspector, 10 for the
+retrieval metrics and the identity filter, and 50 for the editable knobs. The count is
+whatever `python -m pytest -q` prints; the per-file breakdown is in
+[EVALUATION.md](EVALUATION.md). What worked: the offline stub made the whole feature testable
 without a network, and the no-re-rank test caught exactly the risk that worried me.
 What did not, at first: the offline explainer truncated notes on decimal points and on
 an artist's initial ("A. Keys Trio") -- it ran without error but produced wrong text,
@@ -336,5 +407,7 @@ focused on what the system is, how to run it, and how it was decided.
   the song and taste-profile feature inventories, the scoring recipe walked through
   term by term, and the optional genre-diversity re-ranking extension.
 - [EVALUATION.md](EVALUATION.md) -- the biases predicted from the recipe and from the
-  catalog (including the original 20-song versus expanded 46-song history), and the
-  full inventory of what the automated test suite covers.
+  catalog (including the original 20-song versus expanded 46-song history), the full
+  inventory of what the automated test suite covers, and the measured retrieval
+  quality (hit@k, MRR, and the leave-one-out leak count) with the commands that
+  regenerate it.

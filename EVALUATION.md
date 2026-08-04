@@ -64,7 +64,9 @@ python -m pytest
 
 The test suite is a quality add -- the assignment does not require tests, but they
 act as a reproducibility and regression guard and double as an executable
-specification of the recipe. There are 138 tests across eight files. `tests/`
+specification of the recipe. There are 138 tests across eight files, which is the
+count `python -m pytest -q` prints and the number to trust over any figure retyped
+into prose. `tests/`
 `test_recommender.py` covers the core recipe, `tests/test_evaluation.py` covers
 the Phase 4 evaluation profiles and the popularity experiment,
 `tests/test_diversity.py` covers the genre diversity re-ranking side-car, and
@@ -105,3 +107,47 @@ Together they cover:
   (`k <= 0`, `max_per_genre <= 0`); an unreachable k returns fewer than k rather
   than relaxing the cap; a missing `genre` key does not crash; and stability
   (kept songs preserve their relative order).
+- **The Inspector:** the retrieval scoreboard's winner agrees with `retrieve_note`
+  for every catalog song; the board covers every note exactly once and is ordered by
+  overlap descending; inspecting a run changes neither its results nor the catalog or
+  corpus; the prompt is built with no API key, is deterministic, contains the
+  retrieved note and nothing invented, and survives a multi-line note; and a tiebreak
+  override is reported, with strict overrides distinguished from plain ties.
+- **Retrieval quality and the grounding guardrail:** hit@k and reciprocal rank behave
+  as defined; every song has a gold note; the shipped retriever puts the right note
+  first every time; the exact-title tiebreak is load-bearing rather than decoration;
+  the confidence floor has headroom over the lowest correct retrieval; and, under
+  leave-one-out, a song whose own note is missing falls back rather than being
+  explained with a sibling's facts.
+- **The editable knobs:** the defaults are exactly the shipped values (weights 2/1/1,
+  floor 0.15, tiebreak and metadata filter and stopwords on); the reasons-sum-to-the-
+  score guarantee holds under ANY weighting, not only 2/1/1; `retrieve_note` keeps its
+  three-tuple contract under every knob setting; the configs are immutable; each knob
+  moves the metric it is supposed to move (and disabling the metadata filter
+  reintroduces the leak); and the UI never assigns to the shipped defaults or persists
+  a knob to disk.
+
+## Retrieval quality (measured, not asserted)
+
+Retrieval used to be described only in prose. Since Project 5 it is measured, so the
+numbers here can be regenerated instead of retyped:
+
+```bash
+# hit@1, hit@3, MRR against a gold set derived from the corpus, plus the
+# confidence-floor headroom and the leave-one-out leak count.
+python -m src.evaluate_retrieval
+
+# The same metrics with one knob changed per row, so each knob's cost is visible.
+python -m src.evaluate_retrieval --compare
+
+# The catalog-wide profile sweeps behind the diversity and popularity findings.
+python -m src.sweep
+```
+
+The two headline results, both reproduced by the first command: the shipped retriever
+scores hit@1 1.000, while suppressing the exact-title tiebreak drops it to 0.674 with
+hit@3 still at 1.000, which says the weakness is ranking rather than recall. And the
+leave-one-out leak count is 0 of 46, where before the metadata filter it was all 46,
+because sibling notes share genre and mood vocabulary and matched at 0.60 to 0.80
+against a 0.15 floor. That is the evidence that the confidence floor alone was never
+the thing protecting grounding.
