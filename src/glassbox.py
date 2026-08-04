@@ -28,13 +28,28 @@ DESIGN CONSTRAINT: OBSERVATION MUST NOT PERTURB
     module mutates a song dict, a note, or a result. A test pins that a run's
     output is identical whether or not the glass box is used, which is the same
     shape as the guardrail pinning that the explainer never re-ranks.
+
+CONFIGURATION PASSES STRAIGHT THROUGH
+    Every function here takes optional scoring_config and retrieval_config
+    arguments and does nothing with them except hand them to score_song,
+    recommend_songs, retrieve_note and score_all_notes. That is the same rule
+    the module already followed for arithmetic: the glass box reports what the
+    system did under a given configuration and never decides anything itself. If
+    a knob were interpreted here as well as downstream, the Inspector could show
+    numbers from one configuration while the pipeline ran another, which is the
+    single worst thing a debugging view can do.
 """
 
 from __future__ import annotations
 
+from src.config import (
+    RetrievalConfig,
+    ScoringConfig,
+    retrieval_or_default,
+)
 from src.llm_client import build_explain_prompt
 from src.recommender import recommend_songs, score_song
-from src.retriever import MIN_CONFIDENCE, retrieve_note, score_all_notes
+from src.retriever import retrieve_note, score_all_notes
 
 # How many songs BELOW the shown cut to include in the ranking table. The near
 # misses are where the insight is: seeing a 3.92 lose to a 3.95 teaches more
@@ -43,7 +58,8 @@ from src.retriever import MIN_CONFIDENCE, retrieve_note, score_all_notes
 NEAR_MISS_COUNT = 5
 
 
-def score_breakdown(prefs: dict, song: dict) -> dict:
+def score_breakdown(prefs: dict, song: dict,
+                    scoring_config: ScoringConfig | None = None) -> dict:
     """Itemize one song's score into its three terms.
 
     The terms are recovered by PARSING the reasons list that score_song already
@@ -52,10 +68,16 @@ def score_breakdown(prefs: dict, song: dict) -> dict:
     that guarantee, while a second implementation of the recipe could drift away
     from the first and quietly display numbers the system never used.
 
+    Parsing also keeps this correct under NON-DEFAULT weights for free. The
+    reason strings carry whatever the weights actually were, so a genre weight of
+    3.5 shows up here as 3.5 without this function knowing a config exists. A
+    recomputing version would have needed the config threaded into its arithmetic
+    and would have been one more place to get it wrong.
+
     Returns a dict with the genre, mood and energy contributions, the total, and
     the raw reasons list.
     """
-    score, reasons = score_song(prefs, song)
+    score, reasons = score_song(prefs, song, scoring_config)
 
     # Default every term to 0.0, then fill in whichever reasons are present. A
     # non-matching dimension simply produces no reason string, which is why a
@@ -84,7 +106,8 @@ def score_breakdown(prefs: dict, song: dict) -> dict:
 
 
 def rank_table(prefs: dict, songs: list[dict], k: int = 5,
-               limit: int | None = None) -> list[dict]:
+               limit: int | None = None,
+               scoring_config: ScoringConfig | None = None) -> list[dict]:
     """Rank the WHOLE catalog and return breakdowns, marking the top-k cut.
 
     Answering "why this song over the rest" requires showing the rest, so this
@@ -98,11 +121,11 @@ def rank_table(prefs: dict, songs: list[dict], k: int = 5,
         rank   -- 1-based position in the full ranking
         shown  -- whether this row is inside the top-k the listener received
     """
-    ranked = recommend_songs(prefs, songs, k=len(songs))
+    ranked = recommend_songs(prefs, songs, k=len(songs), config=scoring_config)
 
     rows: list[dict] = []
     for position, (song, _score, _reasons) in enumerate(ranked, start=1):
-        row = score_breakdown(prefs, song)
+        row = score_breakdown(prefs, song, scoring_config)
         row["rank"] = position
         row["shown"] = position <= k
         rows.append(row)
@@ -112,7 +135,8 @@ def rank_table(prefs: dict, songs: list[dict], k: int = 5,
     return rows[:limit]
 
 
-def retrieval_board(song: dict, notes: dict[str, str]) -> dict:
+def retrieval_board(song: dict, notes: dict[str, str],
+                    retrieval_config: RetrievalConfig | None = None) -> dict:
     """Report the full retrieval competition for one song.
 
     This is the lecture's "print the retrieved chunks" step, which VibeFinder
@@ -133,8 +157,9 @@ def retrieval_board(song: dict, notes: dict[str, str]) -> dict:
     necessarily the highest overlap on the board. The Inspector shows both
     columns so that discrepancy is visible instead of misleading.
     """
-    board = score_all_notes(song, notes)
-    note, confidence, picked_title = retrieve_note(song, notes)
+    cfg = retrieval_or_default(retrieval_config)
+    board = score_all_notes(song, notes, cfg)
+    note, confidence, picked_title = retrieve_note(song, notes, cfg)
 
     # The note overlap alone would have retrieved: the top of the board.
     overlap_winner = board[0]["title"] if board else None
@@ -146,7 +171,10 @@ def retrieval_board(song: dict, notes: dict[str, str]) -> dict:
         "picked_note": note,
         "confidence": confidence,
         "grounded": note is not None,
-        "floor": MIN_CONFIDENCE,
+        # The floor in EFFECT for this board, read from the config rather than
+        # from the module constant, so a UI that raised the floor cannot print
+        # 0.15 underneath a board that was actually judged at 0.60.
+        "floor": cfg.min_confidence,
         "overlap_winner": overlap_winner,
         # Only meaningful when something was actually picked. A song that fell
         # below the floor was not "overridden", it simply had no usable note.
@@ -175,7 +203,9 @@ def retrieval_board(song: dict, notes: dict[str, str]) -> dict:
 
 
 def inspect_song(prefs: dict, song: dict, notes: dict[str, str],
-                 reasons: list[str] | None = None) -> dict:
+                 reasons: list[str] | None = None,
+                 scoring_config: ScoringConfig | None = None,
+                 retrieval_config: RetrievalConfig | None = None) -> dict:
     """Full glass-box record for a single recommended song.
 
     Bundles the three panels for one song: how it scored, what retrieval did,
@@ -183,8 +213,8 @@ def inspect_song(prefs: dict, song: dict, notes: dict[str, str],
     offline mode, because assembling it is pure and needs no key: a reviewer
     running without credentials should still see what retrieval feeds the model.
     """
-    breakdown = score_breakdown(prefs, song)
-    retrieval = retrieval_board(song, notes)
+    breakdown = score_breakdown(prefs, song, scoring_config)
+    retrieval = retrieval_board(song, notes, retrieval_config)
 
     # Use the caller's reasons when supplied (so the Inspector quotes the same
     # strings the run produced) and fall back to the freshly computed ones.
@@ -228,14 +258,16 @@ def inspect_song(prefs: dict, song: dict, notes: dict[str, str],
 
 
 def inspect_run(prefs: dict, songs: list[dict], notes: dict[str, str],
-                k: int = 5) -> dict:
+                k: int = 5,
+                scoring_config: ScoringConfig | None = None,
+                retrieval_config: RetrievalConfig | None = None) -> dict:
     """Glass-box record for a whole run: the ranking plus per-song detail.
 
     Read-only. Nothing here mutates the catalog, the notes, or any result, so
     inspecting a run cannot change what that run would have produced.
     """
-    rows = rank_table(prefs, songs, k=k)
-    ranked = recommend_songs(prefs, songs, k=k)
+    rows = rank_table(prefs, songs, k=k, scoring_config=scoring_config)
+    ranked = recommend_songs(prefs, songs, k=k, config=scoring_config)
 
     return {
         "prefs": dict(prefs),
@@ -243,7 +275,8 @@ def inspect_run(prefs: dict, songs: list[dict], notes: dict[str, str],
         "corpus_size": len(notes),
         "ranking": rows,
         "songs": [
-            inspect_song(prefs, song, notes, reasons)
+            inspect_song(prefs, song, notes, reasons,
+                         scoring_config, retrieval_config)
             for song, _score, reasons in ranked
         ],
     }

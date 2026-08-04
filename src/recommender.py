@@ -8,12 +8,20 @@ in plain language. That explainability is the whole point of the assignment.
 CLI-first design: all recommendation logic lives here and is exercised through
 src/main.py before any UI is added.
 
-Scoring recipe (maximum possible score = 4.0):
+Scoring recipe (maximum possible score = 4.0 at the default weights):
   * genre match:  +2.0 when the song's genre equals the user's favorite genre
   * mood match:   +1.0 when the song's mood equals the user's favorite mood
   * energy term:  +esim, where esim = max(0.0, 1.0 - abs(song_energy - target))
-                  rounded to 2 decimals. esim is largest (1.0) when the song's
-                  energy is exactly on the target and shrinks as they diverge.
+                  scaled by the energy weight and rounded to 2 decimals. esim is
+                  largest (1.0) when the song's energy is exactly on the target
+                  and shrinks as they diverge.
+
+Those three numbers are the DEFAULTS, not constants. They live in
+ScoringConfig in src/config.py and every function here accepts an optional
+config that falls back to those defaults, so a caller who passes nothing gets
+precisely the behavior documented above. Changing a weight also changes the
+maximum score (the 4.0 ceiling is just 2.0 + 1.0 + 1.0, not a normalization);
+src/config.py explains why we report that rather than rescale it away.
 
 All genre/mood comparisons are case-insensitive and whitespace-trimmed, so
 "Pop", " pop " and "pop" are treated as the same genre.
@@ -29,6 +37,8 @@ Data model:
 from __future__ import annotations
 
 import csv
+
+from src.config import ScoringConfig, scoring_or_default
 
 # The seven columns every catalog CSV MUST declare in its header row. We keep
 # this as a module-level constant (rather than inlining it) so the header check
@@ -166,16 +176,39 @@ def load_songs(path: str) -> list[dict]:
     return songs
 
 
-def score_song(user_prefs: dict, song: dict) -> tuple[float, list[str]]:
+def score_song(user_prefs: dict, song: dict,
+               config: ScoringConfig | None = None) -> tuple[float, list[str]]:
     """Return (score, reasons) for one song given the user's taste profile.
 
     The reasons list is a human-readable explanation of how the score was built.
     IMPORTANT GUARANTEE (checked by a test): the numeric value inside each reason
     string sums to exactly the returned score, because:
-        * the genre reason contributes exactly 2.0,
-        * the mood reason contributes exactly 1.0,
-        * the energy reason contributes exactly esim (already rounded to 2dp),
-    and score = 2.0*genre_hit + 1.0*mood_hit + esim.
+        * the genre reason contributes exactly config.genre_weight,
+        * the mood reason contributes exactly config.mood_weight,
+        * the energy reason contributes exactly the energy term (rounded to 2dp),
+    and score = genre_weight*genre_hit + mood_weight*mood_hit + energy_term.
+
+    HOW THAT GUARANTEE SURVIVES ARBITRARY WEIGHTS
+        It would be easy to break this while making the weights configurable, so
+        the two mechanics that preserve it are worth naming:
+
+        1. The genre and mood reasons interpolate the weight itself rather than a
+           hard-coded "2.0"/"1.0" literal, and they use plain f-string formatting
+           of a float, which in Python emits repr() and therefore round-trips the
+           exact value. The string cannot say a different number from the one
+           added to the score.
+        2. The energy term is rounded ONCE, AFTER the weight is applied, and that
+           single rounded float is both added to the score and formatted into the
+           reason. Rounding the closeness first and multiplying afterwards would
+           reintroduce drift (0.33 closeness at weight 0.7 adds 0.231 but would
+           print +0.23), which is precisely the bug the round-once-reuse
+           discipline exists to prevent.
+
+    `config` is optional and defaults to DEFAULT_SCORING, so every existing call
+    site (`score_song(prefs, song)`) behaves exactly as it always has. With the
+    default weights of 2.0 / 1.0 / 1.0 the maximum score is 4.0; see
+    ScoringConfig for why a changed weight moves that scale and why we do not
+    renormalize it.
 
     Graceful, documented, non-crashing behavior on missing data:
         * A missing/blank favorite_genre or favorite_mood simply cannot match
@@ -184,30 +217,38 @@ def score_song(user_prefs: dict, song: dict) -> tuple[float, list[str]]:
           the energy term is 0.0. We still append the energy reason (at +0.00)
           so the reasons list keeps a stable shape and always sums to the score.
     """
+    cfg = scoring_or_default(config)
     reasons: list[str] = []
     score = 0.0
 
-    # --- Genre dimension (+2.0) -------------------------------------------
+    # --- Genre dimension (+genre_weight, default 2.0) ----------------------
     # Normalize BOTH sides the same way load_songs normalized the catalog, so
     # the comparison is case-insensitive even when score_song is called directly
     # on a hand-built dict (as the tests do). We require the user's genre to be
     # non-empty so a blank profile field cannot spuriously match a blank song
     # field ("" == "").
+    #
+    # float() before formatting so an integer weight (a caller passing 2 rather
+    # than 2.0) still prints "2.0" and not "2". The default path is unaffected:
+    # float(2.0) is 2.0, and f"{2.0}" is "genre match (+2.0)", character for
+    # character what this line produced before it took a weight.
+    genre_weight = float(cfg.genre_weight)
     user_genre = str(user_prefs.get("favorite_genre", "")).strip().lower()
     song_genre = str(song.get("genre", "")).strip().lower()
     if user_genre and user_genre == song_genre:
-        score += 2.0
-        reasons.append("genre match (+2.0)")
+        score += genre_weight
+        reasons.append(f"genre match (+{genre_weight})")
 
-    # --- Mood dimension (+1.0) --------------------------------------------
+    # --- Mood dimension (+mood_weight, default 1.0) ------------------------
+    mood_weight = float(cfg.mood_weight)
     user_mood = str(user_prefs.get("favorite_mood", "")).strip().lower()
     song_mood = str(song.get("mood", "")).strip().lower()
     if user_mood and user_mood == song_mood:
-        score += 1.0
-        reasons.append("mood match (+1.0)")
+        score += mood_weight
+        reasons.append(f"mood match (+{mood_weight})")
 
-    # --- Energy dimension (+esim) -----------------------------------------
-    # esim is a closeness score in 0.0 .. 1.0: it is 1.0 when the song's energy
+    # --- Energy dimension (+energy_weight * closeness) ---------------------
+    # Closeness is a score in 0.0 .. 1.0: it is 1.0 when the song's energy
     # exactly equals the target and falls off linearly as they diverge, floored
     # at 0.0 by max(). abs() makes the penalty symmetric -- a song 0.1 ABOVE the
     # target and one 0.1 BELOW score the same energy term. This term is what
@@ -219,10 +260,18 @@ def score_song(user_prefs: dict, song: dict) -> tuple[float, list[str]]:
         # rather than crashing (documented behavior).
         esim = 0.0
     else:
-        # Round to 2 decimals ONCE and reuse this exact value both as the score
-        # contribution and in the reason string below. This is why the reasons
-        # always sum to the score with no rounding drift.
-        esim = round(max(0.0, 1.0 - abs(song_energy - target_energy)), 2)
+        # Apply the weight BEFORE rounding, then round to 2 decimals ONCE and
+        # reuse that exact value both as the score contribution and in the
+        # reason string below. Order matters here: rounding the closeness first
+        # and scaling afterwards would produce a contribution with more than two
+        # decimals for any weight other than 1.0, and the reason string (printed
+        # at 2dp) would then no longer sum to the score.
+        #
+        # At the default weight of 1.0 this is arithmetically identical to the
+        # original `round(max(0.0, 1.0 - abs(diff)), 2)`, because multiplying by
+        # 1.0 is exact in IEEE-754 floating point. Default output is unchanged.
+        closeness = max(0.0, 1.0 - abs(song_energy - target_energy))
+        esim = round(closeness * float(cfg.energy_weight), 2)
     score += esim
     # The energy reason is ALWAYS appended (even at +0.00) so the reasons list
     # has a stable shape and its components always reconcile to the score.
@@ -231,8 +280,13 @@ def score_song(user_prefs: dict, song: dict) -> tuple[float, list[str]]:
     return (score, reasons)
 
 
-def recommend_songs(user_prefs: dict, songs: list[dict], k: int = 5) -> list:
+def recommend_songs(user_prefs: dict, songs: list[dict], k: int = 5,
+                    config: ScoringConfig | None = None) -> list:
     """Score every song and return the top-k as (song, score, reasons) tuples.
+
+    `config` is threaded straight through to score_song and defaults to
+    DEFAULT_SCORING. It is added AFTER k so every existing positional call
+    (`recommend_songs(prefs, songs, 5)`) keeps working unchanged.
 
     Edge cases handled:
         * empty catalog         -> returns []
@@ -242,7 +296,7 @@ def recommend_songs(user_prefs: dict, songs: list[dict], k: int = 5) -> list:
     """
     scored = []
     for song in songs:
-        score, reasons = score_song(user_prefs, song)
+        score, reasons = score_song(user_prefs, song, config)
         scored.append((song, score, reasons))
 
     # Sort by score DESCENDING. We deliberately use sorted() (not list.sort())
