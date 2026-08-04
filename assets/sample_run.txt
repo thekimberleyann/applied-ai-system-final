@@ -1,0 +1,208 @@
+LOG INFO vibefinder.rag: rec='Summer Anthem' score=4.00 retrieved='Summer Anthem' confidence=1.00 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Sunshine Pop' score=3.95 retrieved='Sunshine Pop' confidence=0.67 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Confetti Skies' score=3.92 retrieved='Confetti Skies' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Velvet Hustle' score=2.00 retrieved='Velvet Hustle' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Mirrorball Fever' score=1.95 retrieved='Mirrorball Fever' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Lofi Rain' score=4.00 retrieved='Lofi Rain' confidence=0.67 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Study Fog' score=2.98 retrieved='Study Fog' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Underwater Bloom' score=1.90 retrieved='Underwater Bloom' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Harbor Sway' score=1.78 retrieved='Harbor Sway' confidence=0.50 mode=offline grounded=True
+LOG INFO vibefinder.rag: rec='Island Time' score=1.75 retrieved='Island Time' confidence=0.50 mode=offline grounded=True
+Loaded songs: 46
+RAG explainer mode: offline  |  notes loaded: 46
+
+=== Recommendations for the default profile (pop / happy) [RAG] ===
+1. Summer Anthem  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Summer Anthem: An upbeat pop anthem by Coast Kids, high energy at 0.80 and a danceable 120 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Summer Anthem', confidence 1.00]
+2. Sunshine Pop  (score 3.95)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+     why: Sunshine Pop: A bright, upbeat pop track by The Brights. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Sunshine Pop', confidence 0.67]
+3. Confetti Skies  (score 3.92)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.92)
+     why: Confetti Skies: A bright, major-key pop tune that lands squarely in happy territory, with a punchy 0.72 energy and a danceable 116 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Confetti Skies', confidence 0.50]
+4. Velvet Hustle  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Velvet Hustle: A disco groove with a happy mood, upbeat at 0.80 energy over an 118 BPM strut. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Velvet Hustle', confidence 0.50]
+5. Mirrorball Fever  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+     why: Mirrorball Fever: A disco anthem in a happy mood, bright and danceable at 0.85 energy over a classic 120 BPM. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Mirrorball Fever', confidence 0.50]
+
+=== Chill Lofi (lofi / chill / energy 0.30) [RAG] ===
+1. Lofi Rain  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Lofi Rain: A calm lofi beat by Study Cat, low energy at 0.30 and a slow 72 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Lofi Rain', confidence 0.67]
+2. Study Fog  (score 2.98)
+     - genre match (+2.0)
+     - energy close to target (+0.98)
+     why: Study Fog: A lofi track built for the background, mellow and low-key at 0.28 energy over a slow 74 BPM. It matched on your favorite genre, and your target energy.
+          [grounded on 'Study Fog', confidence 0.50]
+3. Underwater Bloom  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+     why: Underwater Bloom: A dreampop track with a chill mood, gentle at 0.40 energy and a 100 BPM drift. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Underwater Bloom', confidence 0.50]
+4. Harbor Sway  (score 1.78)
+     - mood match (+1.0)
+     - energy close to target (+0.78)
+     why: Harbor Sway: A reggae tune with a chill mood, relaxed at 0.52 energy over a loose 78 BPM. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Harbor Sway', confidence 0.50]
+5. Island Time  (score 1.75)
+     - mood match (+1.0)
+     - energy close to target (+0.75)
+     why: Island Time: A reggae song by Palm Groove, mid energy at 0.55 and a loose 76 BPM. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Island Time', confidence 0.50]
+
+### DIVERSE / STRESS PROFILES (score-only) ###
+
+=== High-Energy Pop (pop / happy / energy 0.95) ===
+1. Sunshine Pop  (score 3.90)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+2. Summer Anthem  (score 3.85)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+3. Confetti Skies  (score 3.77)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.77)
+4. Mirrorball Fever  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+5. Velvet Hustle  (score 1.85)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+
+=== Chill Lofi (lofi / chill / energy 0.30) ===
+1. Lofi Rain  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Study Fog  (score 2.98)
+     - genre match (+2.0)
+     - energy close to target (+0.98)
+3. Underwater Bloom  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+4. Harbor Sway  (score 1.78)
+     - mood match (+1.0)
+     - energy close to target (+0.78)
+5. Island Time  (score 1.75)
+     - mood match (+1.0)
+     - energy close to target (+0.75)
+
+=== Deep Intense Rock (rock / intense / energy 0.95) ===
+1. Heavy Riff  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Concrete Anthem  (score 3.95)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+3. Static Rebellion  (score 2.90)
+     - genre match (+2.0)
+     - energy close to target (+0.90)
+4. Furnace Heart  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+5. Ironclad Wrath  (score 0.98)
+     - energy close to target (+0.98)
+
+=== Romantic R&B (r&b / romantic / energy 0.50) ===
+1. Velvet Touch  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Slow Confession  (score 3.98)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.98)
+3. Late Set  (score 1.98)
+     - mood match (+1.0)
+     - energy close to target (+0.98)
+4. Velvet Sermon  (score 1.92)
+     - mood match (+1.0)
+     - energy close to target (+0.92)
+5. Soul Fire  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+
+### ADVERSARIAL PROFILES (score-only) ###
+
+=== Conflicted (blues / sad but target energy 0.95) ===
+1. Rainy Day Blues  (score 3.45)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.45)
+2. Delta Dust  (score 3.43)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.43)
+3. Whiskey Lament  (score 2.49)
+     - genre match (+2.0)
+     - energy close to target (+0.49)
+4. Dust and Diesel  (score 1.50)
+     - mood match (+1.0)
+     - energy close to target (+0.50)
+5. Heavy Riff  (score 1.00)
+     - energy close to target (+1.00)
+
+=== Ghost Genre (kpop not in catalog) ===
+1. Summer Anthem  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+2. Velvet Hustle  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+3. Sunshine Pop  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+4. Mirrorball Fever  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+5. Confetti Skies  (score 1.92)
+     - mood match (+1.0)
+     - energy close to target (+0.92)
+
+=== Energy Ceiling (pop / happy / target energy 1.0) ===
+1. Sunshine Pop  (score 3.85)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+2. Summer Anthem  (score 3.80)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.80)
+3. Confetti Skies  (score 3.72)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.72)
+4. Mirrorball Fever  (score 1.85)
+     - mood match (+1.0)
+     - energy close to target (+0.85)
+5. Velvet Hustle  (score 1.80)
+     - mood match (+1.0)
+     - energy close to target (+0.80)
+
+### RELIABILITY SUMMARY (RAG layer) ###
+10/10 explained recommendations were grounded on a retrieved note; average retrieval confidence 0.58; explainer mode = offline.
+Guardrail: any recommendation with no note above the confidence floor falls back to a score-only explanation instead of inventing details.

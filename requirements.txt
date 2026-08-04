@@ -1,3 +1,12 @@
 pytest>=7.0
 pytest-cov>=4.0
 # tabulate>=0.9  # optional: pretty CLI tables (Optional Extension Challenge 4)
+
+# Optional: enables the LIVE RAG explanation path (Gemini). The system runs fully
+# offline and deterministic without it, so it is intentionally NOT a hard dependency.
+# Install only if you set GEMINI_API_KEY and want model-phrased explanations.
+# google-genai>=1.0
+
+# Optional: the Streamlit web UI (app.py). The CLI is the graded path; install this
+# only if you want the point-and-click interface.
+# streamlit>=1.30

@@ -1,8 +1,261 @@
-# VibeFinder - Music Recommender Simulation
+# VibeFinder - Applied AI System (RAG-Extended Music Recommender)
 
-A simple content-based music recommender. It scores each song in a catalog against
-a user's "taste profile" (favorite genre, mood, target energy) and returns a ranked,
-explained list of suggestions.
+A content-based music recommender that scores each song in a catalog against a
+user's "taste profile" (favorite genre, mood, target energy) and returns a ranked
+list of suggestions, each with a grounded, natural-language explanation of why it
+fits you.
+
+---
+
+# Project 5: Applied AI System
+
+## Original project (Modules 1-3)
+
+This system extends **VibeFinder**, my Module 3 Music Recommender. The original
+project was a content-based recommender: it loaded a 20-song catalog, scored every
+song against a listener's stated taste profile using a transparent three-term recipe
+(genre +2.0, mood +1.0, energy closeness up to +1.0), and returned a ranked top-5
+with a rule-based reason for each pick. Its whole point was explainability -- every
+number in a recommendation could be traced back to the recipe.
+
+## Summary: what the extended system does and why it matters
+
+For Project 5 I added a **Retrieval-Augmented Generation (RAG)** layer on top of that
+recommender. The recommender still decides which songs to suggest and in what order.
+The new layer then, for each chosen song, **retrieves** a factual note about it from a
+local knowledge corpus and uses a language model to **generate** a short "why this
+fits you" that is grounded in that retrieved note. A ranked list with "+2.0 genre
+match" is correct but cold; the RAG layer turns it into an explanation a person can
+actually read, without letting the model make things up.
+
+The required AI feature is RAG, and it is **fully integrated into the main flow**:
+`python -m src.main` produces the explanations by default. The generation runs
+**offline and deterministically** with no API key (so it is reproducible for any
+reviewer) and upgrades to a live model only when `GEMINI_API_KEY` is set.
+
+## AI feature: Retrieval-Augmented Generation
+
+- **Retrieve** (`src/retriever.py`): a token-overlap search over `data/song_notes.md`
+  returns the best-matching note for a song plus a confidence score (0.0-1.0).
+- **Augment + Generate** (`src/llm_client.py`): the retrieved note is the ONLY factual
+  context handed to the explainer. In offline mode a deterministic stub composes the
+  explanation from the note's first sentence plus the match reasons; in live mode a
+  Gemini prompt is hard-constrained to the note and told to refuse rather than invent.
+- **Orchestrate** (`src/explain.py`): ties recommend -> retrieve -> explain together,
+  logs one line per recommendation (confidence, mode, whether it was grounded), and
+  returns structured results.
+
+**The central guardrail: the LLM explains, it never re-ranks.** The deterministic
+score is decided before the explainer ever runs and is only read, never changed. If
+retrieval finds no note above the confidence floor, the system falls back to a
+score-only explanation instead of describing a song it has no facts for. Both
+properties are pinned by tests.
+
+## Architecture Overview
+
+The system is two layers. The **deterministic core** (unchanged from Module 3) loads
+`data/songs.csv`, scores and ranks the songs, and produces the final ordering. The
+**RAG layer** takes that already-ranked list and attaches an explanation to each pick:
+the retriever pulls the relevant note from `data/song_notes.md`, and the explainer
+(offline stub or live Gemini) phrases a grounded "why," falling back to score-only if
+no note is confident enough. Automated tests and human review sit on the output to
+confirm the explainer never changed the ranking and never invented facts. The full
+diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd)
+(rendered below).
+
+![VibeFinder architecture](assets/architecture.png)
+
+## Setup and Run
+
+```bash
+pip install -r requirements.txt
+
+# Default: runs fully offline, deterministic, no API key needed.
+python -m src.main
+
+# Run the tests (62 tests, all offline).
+python -m pytest
+
+# Optional live mode: set a key to have Gemini phrase the explanations.
+# (Offline stub is used automatically if this is unset or google-genai is absent.)
+pip install google-genai
+
+# Provide the key either as an environment variable ...
+export GEMINI_API_KEY=your_key_here      # PowerShell: $env:GEMINI_API_KEY="..."
+                                         # Command Prompt: set GEMINI_API_KEY=...
+# ... or, to avoid retyping it, copy .env.example to .env and put the key there.
+# .env is gitignored, so the key is never committed; main.py loads it automatically.
+python -m src.main
+```
+
+## Optional: Web UI (Streamlit)
+
+A small Streamlit front-end (`app.py`) is included for a point-and-click experience.
+It is optional polish -- the CLI above is the graded, reproducible path -- and it adds
+no new logic: it collects a taste profile from dropdowns and a slider and calls the
+same `recommend` / `retrieve` / `explain` code, showing each ranked song with its
+grounded explanation. It also offers a "genre variety" toggle (the diversity re-rank).
+
+```bash
+pip install streamlit
+streamlit run app.py
+```
+
+Like the CLI, it runs offline by default and uses live Gemini automatically if a key
+is present (shell env var or a local `.env`). A mode banner shows which is active.
+
+It has two views. **Single** runs the finished system. **Compare** is a build-your-own
+A/B lab: the same taste profile is run through two independently-configured pipelines
+side by side -- each side toggles the catalog (Original 20 vs Expanded 46), RAG on/off
+(grounded explanations vs original score-only reasons), live vs offline phrasing, and
+genre variety. It makes the effect of each Project 5 change visible at a glance (for
+example, a `metal / intense` profile has no real match on the 20-song catalog but a
+full 3.95 match on the 46-song one). The comparison is authentic, not mocked: the
+score-only path is the untouched Module 3 recommender and the 20-song catalog is the
+original data from git history.
+
+## Sample Interactions (RAG output, captured from `python -m src.main`)
+
+Full captured run: [`assets/sample_run.txt`](assets/sample_run.txt).
+
+**Example 1 -- default profile (pop / happy / energy 0.8).** Both pop/happy songs
+match on all three terms; the explanation is grounded in each song's note:
+
+```
+=== Recommendations for the default profile (pop / happy) [RAG] ===
+1. Summer Anthem  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Summer Anthem: An upbeat pop anthem by Coast Kids, high energy at 0.80 and a danceable 120 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Summer Anthem', confidence 1.00]
+2. Sunshine Pop  (score 3.95)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
+     why: Sunshine Pop: A bright, upbeat pop track by The Brights. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Sunshine Pop', confidence 0.67]
+```
+
+**Example 2 -- Chill Lofi (lofi / chill / energy 0.30).** A different corner of taste
+space; note how the two partial matches below are explained honestly -- #2 matches
+genre but not mood, #3 matches mood but not genre:
+
+```
+=== Chill Lofi (lofi / chill / energy 0.30) [RAG] ===
+1. Lofi Rain  (score 4.00)
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+     why: Lofi Rain: A calm lofi beat by Study Cat, low energy at 0.30 and a slow 72 BPM. It matched on your favorite genre, the mood you asked for, and your target energy.
+          [grounded on 'Lofi Rain', confidence 0.67]
+2. Study Fog  (score 2.98)
+     - genre match (+2.0)
+     - energy close to target (+0.98)
+     why: Study Fog: A lofi track built for the background, mellow and low-key at 0.28 energy over a slow 74 BPM. It matched on your favorite genre, and your target energy.
+          [grounded on 'Study Fog', confidence 0.50]
+3. Underwater Bloom  (score 1.90)
+     - mood match (+1.0)
+     - energy close to target (+0.90)
+     why: Underwater Bloom: A dreampop track with a chill mood, gentle at 0.40 energy and a 100 BPM drift. It matched on the mood you asked for, and your target energy.
+          [grounded on 'Underwater Bloom', confidence 0.50]
+```
+
+**Example 3 -- the guardrail firing (song with no note).** When retrieval finds no
+note above the confidence floor, the system refuses to describe the song and falls
+back to a score-only line (captured in [`assets/guardrail_demo.txt`](assets/guardrail_demo.txt)):
+
+```
+Retrieval for a song with no note:
+  note found: False   confidence: 0.0   matched: None
+  explanation: Untitled Demo: recommended on the score alone (energy close to target (+0.50)).
+```
+
+## Reliability and Guardrail Evidence
+
+The RAG run ends with a reliability summary, and the test suite pins the guarantees:
+
+```
+### RELIABILITY SUMMARY (RAG layer) ###
+10/10 explained recommendations were grounded on a retrieved note; average retrieval confidence 0.58; explainer mode = offline.
+Guardrail: any recommendation with no note above the confidence floor falls back to a score-only explanation instead of inventing details.
+```
+
+```
+$ python -m pytest -q
+62 passed
+```
+
+| What is tested | Where | Result |
+| --- | --- | --- |
+| Every catalog song has a note and retrieves it | `test_retriever.py` | Pass |
+| A song with no note falls back (guardrail) | `test_retriever.py`, `test_explain.py` | Pass |
+| Offline explanation is deterministic | `test_explain.py` | Pass |
+| Explanation is grounded in the note (no decimal/initial truncation) | `test_explain.py` | Pass |
+| LLM layer never re-ranks (order + scores unchanged) | `test_explain.py` | Pass |
+
+Test log: [`assets/pytest_summary.txt`](assets/pytest_summary.txt).
+
+## Design Decisions and Trade-offs
+
+- **RAG instead of a chatbot.** The recommender is the product; the AI's job is to
+  explain its output trustworthily, not to replace the scoring. So the LLM sits
+  downstream of a fixed ranking rather than driving it.
+- **Offline stub by default.** Requiring an API key would make the project
+  unreproducible for a grader. The deterministic stub means the system, its output,
+  and its tests are identical on any machine; live Gemini is a strict upgrade, not a
+  dependency. Trade-off: the offline wording is templated rather than fluent.
+- **Token-overlap retrieval, not embeddings.** For a 20-song catalog, embeddings would
+  be gold plating. A transparent overlap score is easy to log, test, and reason about.
+- **Explain, never re-rank.** Keeping the LLM strictly downstream is what makes the
+  system auditable: the ranking is always the deterministic recipe, and a test proves
+  the explainer cannot change it.
+
+### How the song categories are grounded
+
+The catalog's `genre / mood / energy` schema is a deliberate, principled simplification
+of how the music industry and music-information-retrieval (MIR) research categorize
+tracks, not an ad-hoc choice:
+
+- **Genre** follows the standard "one label from a bounded list" pattern. The canonical
+  MIR benchmark, the GTZAN genre collection, uses a fixed set of 10 genres (blues,
+  classical, country, disco, hip-hop, jazz, metal, pop, reggae, rock); this catalog
+  covers all 10 plus a few adjacent labels (synthwave, lofi, edm, r&b, and others).
+- **Energy** (0.0-1.0) matches Spotify's `energy` audio feature exactly in both concept
+  ("perceptual intensity and activity") and scale, so this dimension mirrors a
+  production system rather than inventing a metric.
+- **Mood** is a single word from the common vocabulary seen in mood-tagged datasets
+  (happy, sad, calm, energetic, chill, romantic...). This is a documented simplification:
+  Spotify has no single mood field and instead derives mood from `valence` + `energy`,
+  a 2-D model (Russell's valence-arousal circumplex). A single mood word collapses that
+  plane to one point, so, for example, "sad" (low energy, low valence) and "angry" (high
+  energy, low valence) are not cleanly separated. The natural upgrade -- out of this
+  project's scope -- is to add a `valence` 0.0-1.0 field to recover the mood quadrant.
+
+In short, `energy` is modeled the industry-standard way, `genre` mirrors the most-cited
+MIR benchmark, and `mood` is a lightweight, interpretable stand-in for the valence axis.
+
+Sources: GTZAN genre collection (Tzanetakis & Cook, 2002); Spotify Web API audio-features
+reference (`energy`, `valence` definitions); Russell's circumplex model of affect (1980,
+the valence-arousal basis for the mood quadrant).
+
+## Testing Summary
+
+62 automated tests pass (up from 50 in Module 3): the original 50 recipe/evaluation/
+diversity tests plus 12 new ones for retrieval, grounding, the guardrail fallback, and
+the no-re-rank guarantee. What worked: the offline stub made the whole feature testable
+without a network, and the no-re-rank test caught exactly the risk that worried me.
+What did not, at first: the offline explainer truncated notes on decimal points and on
+an artist's initial ("A. Keys Trio") -- it ran without error but produced wrong text,
+which I only caught by reading the output. Both are now fixed and pinned by a test.
+
+## Reflection
+
+My graded responsible-AI reflection -- how I collaborated with AI (one helpful and one
+flawed suggestion), the system's limitations and biases, misuse and prevention, and
+what surprised me in testing -- is in [`model_card.md`](model_card.md).
+
+---
 
 ## How The System Works
 
@@ -185,19 +438,23 @@ the measured results and any surprises are reported.
 
 **Biases from the catalog (the data)**
 
-- **Composition skew.** The 20 songs are not evenly balanced -- they skew toward
-  pop and high-energy tracks, and one cluster of electronic-family genres
-  (synthwave, edm, electronic, dreampop) makes up about 20% of the catalog. We
-  expect popular, high-energy profiles to get richer and more varied results than
-  niche profiles simply because there are more songs to match. Phase 4 will
-  compare result quality across different profile types. (Note this is a property
-  of the data, not the recipe: the energy term still rewards closeness to your
-  target, not high energy.)
-- **Thin-mood coverage.** Four moods appear on only one song each: dreamy,
-  intense, mellow, and sad. For a profile asking for one of those moods there is
-  almost nothing to match on, so the mood term can fire at most once and the
-  ranking falls back to genre and energy. Phase 4 will check which mood profiles
-  collapse to genre-plus-energy in practice.
+> Note: the two data biases below described the ORIGINAL 20-song catalog. Project 5
+> expanded the catalog to 46 songs, rebalancing genres (every genre now has 2-3
+> songs, all 10 GTZAN genres covered) and giving every mood at least 3 songs. Both
+> data biases are therefore largely resolved; they are kept here as the baseline the
+> expansion addressed.
+
+- **Composition skew (original catalog).** The original 20 songs were not evenly
+  balanced -- they skewed toward pop and high-energy tracks. We expected popular,
+  high-energy profiles to get richer results than niche profiles simply because
+  there were more songs to match. (Note this is a property of the data, not the
+  recipe: the energy term still rewards closeness to your target, not high energy.)
+  The 46-song catalog spreads genres and energy more evenly, so this skew is largely
+  corrected.
+- **Thin-mood coverage (original catalog).** In the original 20 songs, four moods
+  appeared on only one song each: dreamy, intense, mellow, and sad. A profile asking
+  for one of those had almost nothing to match on. The expansion gives every mood at
+  least 3 songs, so this thin coverage is resolved.
 
 ## Run it
 
@@ -206,15 +463,20 @@ pip install -r requirements.txt
 python -m src.main
 ```
 
-## Sample Recommendation Output
+> The rest of this section documents the **core recipe** in isolation (the Module 3
+> behavior). Since Project 5, `python -m src.main` also attaches the RAG explanations
+> shown in the Project 5 section above; the ranking below is unchanged -- the
+> explainer only adds prose on top of it.
 
-Running `python -m src.main` against the default profile (genre pop, mood happy,
-target energy 0.8) produces this ranking. Note how the two pop/happy songs tie on
-genre and mood, so the energy-closeness term alone decides that Summer Anthem
-(energy 0.80, right on the target) edges out Sunshine Pop (energy 0.85):
+## Sample Recommendation Output (core recipe, score-only)
+
+The default profile (genre pop, mood happy, target energy 0.8) produces this ranking.
+Three pop/happy songs tie on genre and mood, so the energy-closeness term alone orders
+them: Summer Anthem (energy 0.80, right on the target) edges out Sunshine Pop (0.85)
+and Confetti Skies (0.72):
 
 ```
-Loaded songs: 20
+Loaded songs: 46
 
 === Recommendations for the default profile (pop / happy) ===
 1. Summer Anthem  (score 4.00)
@@ -225,18 +487,22 @@ Loaded songs: 20
      - genre match (+2.0)
      - mood match (+1.0)
      - energy close to target (+0.95)
-3. Midnight Drive  (score 0.95)
-     - energy close to target (+0.95)
-4. Crown Season  (score 0.95)
-     - energy close to target (+0.95)
-5. Power Up  (score 0.92)
+3. Confetti Skies  (score 3.92)
+     - genre match (+2.0)
+     - mood match (+1.0)
      - energy close to target (+0.92)
+4. Velvet Hustle  (score 2.00)
+     - mood match (+1.0)
+     - energy close to target (+1.00)
+5. Mirrorball Fever  (score 1.95)
+     - mood match (+1.0)
+     - energy close to target (+0.95)
 ```
 
-Songs 3 to 5 match neither genre nor mood, so their whole score is the energy
-term. This is the genre-dominance effect described under Expected Biases: any
-pop/happy match jumps far ahead of songs that only happen to sit near the target
-energy.
+The three pop/happy songs (each 3.9+) sit far ahead of songs 4 to 5, which are
+disco/happy tracks matching the mood but not the genre (so no +2.0 term). This is
+the genre-dominance effect described under Expected Biases: any full genre+mood match
+jumps far ahead of a mood-only or energy-only match.
 
 ## Optional Extension: Genre Diversity Re-Ranking
 
@@ -273,29 +539,30 @@ python -m src.diversity
 ```
 #  BEFORE (pure recipe)              AFTER (one per genre)
 1  Summer Anthem [pop] 4.00          Summer Anthem [pop] 4.00
-2  Sunshine Pop [pop] 3.95           Midnight Drive [synthwave] 0.95
-3  Midnight Drive [synthwave] 0.95   Crown Season [hip-hop] 0.95
-4  Crown Season [hip-hop] 0.95       Power Up [electronic] 0.92
-5  Power Up [electronic] 0.92        Dance All Night [edm] 0.90
+2  Sunshine Pop [pop] 3.95           Velvet Hustle [disco] 2.00
+3  Confetti Skies [pop] 3.92         Midnight Drive [synthwave] 0.95
+4  Velvet Hustle [disco] 2.00        Crown Season [hip-hop] 0.95
+5  Mirrorball Fever [disco] 1.95     Static Rebellion [rock] 0.95
 ```
 
 **Two honest findings.** Both argue for keeping the extension out of the shipped
 recipe.
 
-- **A cap of 2 is dead code on this catalog.** There are 20 songs with at most 2
-  of any one genre (pop x2, hip-hop x2, everything else x1), and across all 231
-  (genre, mood, energy) profiles no top-5 ever contains 3 songs of a single
-  genre. A cap of 2 can therefore never fire; only a cap of 1 changes anything,
-  which is why 1 is the default. This echoes the earlier popularity tie-breaker
-  that was rejected for the same reason: a knob that almost never fires is not
-  worth shipping.
-- **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop, a
-  genuine 3.95 pop/happy match, and promotes Dance All Night at 0.90 -- an edm
-  song that matches NEITHER the listener's genre NOR their mood. That is a
-  3.05-point quality cost for one slot of genre breadth. It does curb the
-  genre-dominance bias, but it spends the listener's stated taste on variety they
-  did not ask for. That trade is why the shipped `recommend_songs` is left
-  unchanged and diversity stays a separate, optional module.
+- **A cap of 2 was dead code on the original catalog, and the catalog SIZE is what
+  changed that.** On the original 20-song catalog every genre had at most 2 songs, so
+  across all 231 (genre, mood, energy) profiles no top-5 ever held 3 of one genre and
+  a cap of 2 could never fire -- it was dead code, and only a cap of 1 did anything.
+  After Project 5 expanded the catalog to 46 songs, several genres have 3 entries, so
+  the default pop/happy top-5 now holds THREE pop songs and a cap of 2 fires (it drops
+  the third pop song). The lesson is that the knob's usefulness was gated by catalog
+  size, not by the algorithm -- which is exactly why a bigger, balanced catalog matters.
+- **A cap of 1 is not free.** On the default profile it demotes Sunshine Pop (3.95)
+  and Confetti Skies (3.92), two genuine pop/happy matches, and promotes Velvet Hustle
+  at 2.00 -- a disco song that matches the listener's mood but NOT their genre. That is
+  a ~1.95-point quality cost at slot 2 for one extra genre. It does curb the
+  genre-dominance bias, but it spends the listener's stated taste on variety they did
+  not ask for. That trade is why the shipped `recommend_songs` is left unchanged and
+  diversity stays a separate, optional module.
 
 ## Testing
 
@@ -305,11 +572,13 @@ python -m pytest
 
 The test suite is a quality add -- the assignment does not require tests, but they
 act as a reproducibility and regression guard and double as an executable
-specification of the recipe. There are 50 tests across three files. `tests/`
+specification of the recipe. There are 62 tests across five files. `tests/`
 `test_recommender.py` covers the core recipe, `tests/test_evaluation.py` covers
-the Phase 4 evaluation profiles and the popularity experiment, and
-`tests/test_diversity.py` covers the genre diversity re-ranking side-car. Together
-they cover:
+the Phase 4 evaluation profiles and the popularity experiment,
+`tests/test_diversity.py` covers the genre diversity re-ranking side-car, and
+`tests/test_retriever.py` and `tests/test_explain.py` cover the Project 5 RAG layer
+(retrieval, grounding, the no-note guardrail, and the never-re-rank guarantee).
+Together they cover:
 
 - **Loading:** the real catalog loads exactly 20 rows with the right types;
   genre and mood are lower-cased; and malformed rows (a non-numeric cell, a short

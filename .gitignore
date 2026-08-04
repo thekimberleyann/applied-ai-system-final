@@ -8,3 +8,7 @@ __pycache__/
 PLAN.local.md
 ai_log.local.md
 *.local.md
+
+# Secrets: the live-mode Gemini key lives here and must NEVER be committed.
+# .env.example (a keyless template) IS tracked so others know what to set.
+.env
