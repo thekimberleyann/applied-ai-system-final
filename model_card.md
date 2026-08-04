@@ -148,8 +148,8 @@ Running the recipe across many taste profiles surfaced three consistent patterns
   mood match 1.0, so any song matching both starts at 3.0 before the energy term
   is counted. A genuine genre-plus-mood match almost always takes the top spot.
   The size of its lead depends on the profile rather than on a fixed rule. In the
-  folk / nostalgic profile demonstrated below, the number one banks a 2.15-point
-  lead (Wandering Roads 4.00 against Backroad Sunset 1.85), but the recipe does
+  folk / nostalgic profile demonstrated below, the number one banks a 1.06-point
+  lead (Wandering Roads 4.00 against Paper Lanterns 2.94), but the recipe does
   not guarantee that. A mood-only rival with a perfect energy fit reaches 2.0, and
   a genre-only rival with a perfect energy fit reaches 3.0, which is enough to tie
   a genre-plus-mood match whose own energy fit is poor. That tie is then broken
@@ -172,12 +172,15 @@ The clearest weakness is how fragile the ranking becomes below the top match, an
 how easily a popularity signal would corrupt it. The popularity experiment
 (`python -m src.experiment_popularity`) adds a popularity term on top of the pure
 recipe for a folk / nostalgic listener. The deserved number one, Wandering Roads,
-survives. It holds a 2.15-point lead here, and popularity, which only ranges from
-0.0 to 1.0, cannot close that gap until the weight passes 3.52. Sweeping every
-genre-plus-mood match in the catalog, no non-matching song overtakes such a number
-one below weight 2.73, well above the aggressive 2.0 the experiment uses, so the
-top spot is safe at every weight shown. That moat is still a property of this
-catalog's numbers rather than a guarantee of the recipe, since a genre-only rival
+survives. It holds a 1.06-point lead here, and popularity, which only ranges from
+0.0 to 1.0, cannot close that gap until the weight passes 3.52. That safety is
+local to this profile, and on the expanded catalog it does not generalize.
+Sweeping every genre-plus-mood match (`python -m src.sweep`), the weakest moat is
+weight 1.63, where Crown Season unseats Rooftop Session for a hip-hop / chill
+listener. That sits below the aggressive 2.0 the experiment uses, so at weight 2.0
+some listener's deserved number one is already dethroned. The same sweep returns
+2.73 on the original 20-song catalog, so expanding the catalog measurably weakened
+the moat. It was never a guarantee of the recipe either, since a genre-only rival
 with a perfect energy fit can tie a genre-plus-mood match. The ranks below number
 one had no such protection. Even at the mild, defensible weight of 1.0, Summer
 Anthem, a pop chart hit sharing neither genre nor mood with a folk fan, climbed
@@ -277,7 +280,7 @@ arise.
    and it is kept deliberately out of the shipped recipe. Measuring it produced two
    findings that made keeping it out the right call. First, a cap of no more than 2
    per genre was dead code on the original 20-song catalog (at most 2 songs shared
-   any genre, so across all 231 profiles no top-5 ever held 3 of one genre), but it
+   any genre, so across every swept profile no top-5 ever held 3 of one genre), but it
    FIRES on the expanded 46-song catalog, where the default pop/happy top-5 now holds
    three pop songs and a cap of 2 drops the third. The knob's usefulness was gated by
    catalog size, not by the algorithm. Second, a cap of 1 is not free. On the default
@@ -380,7 +383,7 @@ Much later, building the diversity extension, I proposed my own rule: no more th
 2 songs of any one genre in the list I show. It sounded sensible. This time,
 though, I asked the question the agents had asked me. Can it ever fire? So we
 measured. On the original 20-song catalog there were at most 2 of any single genre,
-and across all 231 possible genre, mood, and energy profiles, no top-5 anywhere ever
+and across every swept genre, mood, and energy profile, no top-5 anywhere ever
 contained 3 songs of one genre. A cap of 2 could never fire once; only a cap of 1 did
 anything, so 1 became the default. (When Project 5 later expanded the catalog to 46
 songs, a cap of 2 began to fire -- which only sharpened the point: the feature's
