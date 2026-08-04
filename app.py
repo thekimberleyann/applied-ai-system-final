@@ -6,11 +6,16 @@ collects a taste profile from form controls, calls the existing functions, and
 renders the ranked songs with their grounded RAG explanations. The CLI
 (`python -m src.main`) remains the graded, reproducible path; this is optional polish.
 
-Two views:
-- Single  -- one configuration (the finished system).
-- Compare -- a "build your own model" A/B lab: the same taste profile run through two
+Three views:
+- Single    -- one configuration (the finished system).
+- Compare   -- a "build your own model" A/B lab: the same taste profile run through two
   independently-configured pipelines side by side (catalog size, RAG on/off, live vs
   offline, genre variety), to show what each change actually did.
+- Inspector -- the glass box: the score breakdown behind the ranking, the full
+  retrieval scoreboard with the confidence floor and any tiebreak override, the
+  assembled prompt, and editable knobs (scoring weights, floor, stopwords,
+  tiebreak) whose effects are measured by `python -m src.evaluate_retrieval
+  --compare`.
 
 Run it from the repo root:
 
@@ -29,6 +34,13 @@ import os
 
 import streamlit as st
 
+from src.config import (
+    DEFAULT_RETRIEVAL,
+    DEFAULT_SCORING,
+    RetrievalConfig,
+    ScoringConfig,
+    describe,
+)
 from src.diversity import diversify
 from src.glassbox import inspect_song, rank_table
 from src.llm_client import VibeExplainer
@@ -301,6 +313,163 @@ code {
 """
 
 
+# Every Inspector knob widget's session_state key, in one tuple. The reset
+# control below deletes exactly these, so a knob added to _knob_controls without
+# being listed here would silently survive a reset. One list, one place to miss.
+_KNOB_KEYS = (
+    "knob_genre_w", "knob_mood_w", "knob_energy_w",
+    "knob_floor", "knob_tiebreak", "knob_stopwords", "knob_metafilter",
+)
+
+
+def _reset_knobs() -> None:
+    """Drop every knob widget's stored value so the defaults are rebuilt.
+
+    Wired as a button on_click CALLBACK rather than as an `if st.button(...)`
+    body, because Streamlit runs callbacks BEFORE the script re-executes. A
+    widget whose session_state key no longer exists falls back to its declared
+    `value=`, which is the default config, so deleting the keys is enough and no
+    knob needs a second "what should reset put here" definition that could drift
+    from the first. Doing this inside an `if` body instead would fail: the
+    widgets are created earlier in the same run and would already have been
+    instantiated with the old values.
+
+    This resets WIDGET STATE ONLY. It does not touch src/config.py, which is
+    exactly the point (see _knob_controls).
+    """
+    for key in _KNOB_KEYS:
+        st.session_state.pop(key, None)
+
+
+def _knob_controls() -> tuple[ScoringConfig, RetrievalConfig]:
+    """The editable parameter panel; returns a config pair for THIS render only.
+
+    RUNTIME ONLY, AND THAT IS A HARD RULE
+        These controls build two throwaway dataclasses and hand them back. They
+        never assign to DEFAULT_SCORING or DEFAULT_RETRIEVAL (both are frozen, so
+        they could not), never write a file, and never persist anything beyond
+        Streamlit's per-session widget state. The defaults in src/config.py are
+        what README.md, DESIGN.md, EVALUATION.md and model_card.md describe and
+        what the test suite pins, so a UI that could edit them would let a stray
+        slider invalidate the graded claims. Moving a slider here changes what
+        this one page render computes and nothing else; reloading the app or
+        pressing Reset restores the defaults.
+
+    Each widget's `value=` reads from the default config rather than repeating a
+    literal, so changing a default in src/config.py moves this UI with it and the
+    two cannot disagree about what "default" means.
+    """
+    st.markdown("**Scoring weights**")
+    st.caption(
+        "The recipe is genre + mood + energy closeness. These three numbers are "
+        "the recipe: they were literals inside score_song until they were made "
+        "editable, and they are the whole reason a pop song outranks a rock one."
+    )
+    cols = st.columns(3)
+    genre_w = cols[0].slider(
+        "Genre weight", 0.0, 5.0, DEFAULT_SCORING.genre_weight, 0.25,
+        key="knob_genre_w",
+        help="Added when the song's genre matches yours. The largest term by "
+             "default (2.0) because genre is the coarsest, most reliable signal.")
+    mood_w = cols[1].slider(
+        "Mood weight", 0.0, 5.0, DEFAULT_SCORING.mood_weight, 0.25,
+        key="knob_mood_w",
+        help="Added when the mood matches. Half of genre by default because mood "
+             "labels are more subjective.")
+    energy_w = cols[2].slider(
+        "Energy weight", 0.0, 5.0, DEFAULT_SCORING.energy_weight, 0.25,
+        key="knob_energy_w",
+        help="Multiplies the 0-1 energy closeness. The only continuous term, "
+             "which is what makes it the natural tiebreaker.")
+
+    scoring = ScoringConfig(genre_weight=genre_w, mood_weight=mood_w,
+                            energy_weight=energy_w)
+
+    # The documented 0.0-4.0 scale is just 2.0 + 1.0 + 1.0, not a normalization.
+    # Say so out loud the moment it stops being 4.0, otherwise a user compares
+    # new scores against a remembered old ceiling and reads them as worse.
+    if scoring.max_score != DEFAULT_SCORING.max_score:
+        st.warning(
+            f"Maximum possible score is now **{scoring.max_score:.2f}**, not 4.00. "
+            "The documented 0-4 scale is simply what the default weights 2/1/1 add "
+            "up to, so changing a weight changes the scale. Nothing is renormalized: "
+            "rescaling back to 4.00 would hide the very effect you just asked for."
+        )
+
+    st.markdown("**Retrieval**")
+    st.caption(
+        "Which note gets found, and whether the system is willing to use it. "
+        "Run `python -m src.evaluate_retrieval --compare` to see what each of "
+        "these does to hit@1, MRR and the leak count."
+    )
+    floor = st.slider(
+        "Confidence floor", 0.0, 1.0, DEFAULT_RETRIEVAL.min_confidence, 0.05,
+        key="knob_floor",
+        help="A note must clear this token overlap to be used at all. Below it the "
+             "system reports no usable note and falls back to score-only reasons. "
+             "The lowest CORRECT retrieval in this corpus is 0.25, so anything "
+             "above that starts rejecting notes that were right.")
+    rcols = st.columns(2)
+    tiebreak = rcols[0].checkbox(
+        "Exact-title tiebreak", value=DEFAULT_RETRIEVAL.use_exact_title_tiebreak,
+        key="knob_tiebreak",
+        help="On: a song's own note wins even when a sibling note scores higher on "
+             "raw overlap. Off: pure token overlap decides, and hit@1 falls from "
+             "1.000 to 0.674. This is the hand-rolled reranker.")
+    stopwords = rcols[1].checkbox(
+        "Stopword filtering", value=DEFAULT_RETRIEVAL.use_stopwords,
+        key="knob_stopwords",
+        help="On: drop 'a', 'and', 'the' and 18 others before matching. Off: keep "
+             "every word. Measured effect on this corpus is tiny, because the query "
+             "is title + genre + mood and only 3 of 46 songs have a stopword in it.")
+
+    # The break-it switch is separated from the settings above by a divider and
+    # carries its own explicit warning. It is not a preference and must never
+    # read as one: turning it off restores a fixed bug rather than choosing a
+    # different behavior.
+    st.divider()
+    st.markdown("**Fault injection (not a setting)**")
+    metafilter = st.checkbox(
+        "Metadata filter", value=DEFAULT_RETRIEVAL.use_metadata_filter,
+        key="knob_metafilter",
+        help="Leave this ON. It is the identity check that a retrieved note must "
+             "actually be THIS song's note. Unticking it re-introduces a real, "
+             "already-fixed bug.")
+    if not metafilter:
+        st.error(
+            "**Guardrail disabled: this is a deliberate break-it switch, not a "
+            "setting.** With the metadata filter off, a song that has no note of "
+            "its own is explained using a DIFFERENT song's facts, at high reported "
+            "confidence and with no warning. On the complete shipped corpus you "
+            "will see nothing wrong, because every song has its own note. The "
+            "damage only shows under leave-one-out, where the leak count goes from "
+            "0 songs to all 46 (`python -m src.evaluate_retrieval --compare`). "
+            "That invisibility is the lesson: this failure is not detectable by "
+            "hit@1, MRR, or the confidence number."
+        )
+
+    retrieval = RetrievalConfig(
+        min_confidence=floor,
+        use_exact_title_tiebreak=tiebreak,
+        use_metadata_filter=metafilter,
+        use_stopwords=stopwords,
+        # The stopword VOCABULARY is not exposed as a text box: editing 21 words
+        # in a UI field is a poor experience and a rich source of typos, and the
+        # interesting question ("does filtering help at all") is answered by the
+        # on/off switch above. The set stays configurable in code.
+        stopwords=DEFAULT_RETRIEVAL.stopwords,
+    )
+
+    st.divider()
+    st.button("Reset to defaults", on_click=_reset_knobs,
+              width="stretch",
+              help="Restores the shipped configuration. These controls only ever "
+                   "affect the current session; the defaults in src/config.py are "
+                   "never written to.")
+
+    return scoring, retrieval
+
+
 def _warn_missing_notes(songs: list[dict], notes: dict) -> None:
     """Announce catalog songs that have no note of their own.
 
@@ -331,21 +500,50 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
     All numbers come from src/glassbox.py, which reads the same functions the
     real run uses. Nothing is recomputed here, so this view cannot disagree with
     the system it describes.
+
+    Since the parameters became editable there is a fourth question the panels
+    answer together: what happens if a knob moves. The configs built by
+    _knob_controls are threaded into every glassbox call below, so the whole view
+    re-derives under the edited settings and the change is visible in the same
+    tables that describe the default system.
     """
     prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
     songs = _load_catalog("Expanded (46)")
     notes = _load_corpus()
     _warn_missing_notes(songs, notes)
 
+    # --- Panel 0: the knobs --------------------------------------------------
+    # Collapsed by default so the Inspector still opens on the ranking, which is
+    # what it is for. Someone who wants to experiment opens this; someone who
+    # wants to read the shipped system's behavior is not made to step past it.
+    with st.expander("Edit the parameters (runtime only, never saved)"):
+        scoring_config, retrieval_config = _knob_controls()
+
+    # Name the active configuration on the page itself. Without this, a user who
+    # collapsed the expander after moving a slider would read the tables below as
+    # the shipped system's behavior, and every number would be a lie by omission.
+    scoring_delta = describe(scoring_config)
+    retrieval_delta = describe(retrieval_config)
+    if scoring_delta == "defaults" and retrieval_delta == "defaults":
+        st.caption("Configuration: shipped defaults.")
+    else:
+        st.info(
+            f"**Modified configuration.** Scoring: {scoring_delta}. "
+            f"Retrieval: {retrieval_delta}. Everything below is computed under "
+            "these settings, not the shipped ones."
+        )
+
     # --- Panel 1: the ranking ------------------------------------------------
     st.subheader("Why this order")
     st.caption(
         "No AI here. This is the deterministic recipe, and it alone decides the "
         "ranking. The rows below the cut are the near misses, which is where the "
-        "recipe is easiest to understand: they show what the shown songs beat."
+        "recipe is easiest to understand: they show what the shown songs beat. "
+        f"Maximum possible score under the current weights: "
+        f"{scoring_config.max_score:.2f}."
     )
 
-    rows = rank_table(prefs, songs, k=k)
+    rows = rank_table(prefs, songs, k=k, scoring_config=scoring_config)
     st.dataframe(
         [
             {
@@ -362,18 +560,19 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
             for r in rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     with st.expander(f"Show the full ranking (all {len(songs)} songs)"):
-        full = rank_table(prefs, songs, k=k, limit=len(songs))
+        full = rank_table(prefs, songs, k=k, limit=len(songs),
+                          scoring_config=scoring_config)
         st.dataframe(
             [
                 {"#": r["rank"], "shown": "yes" if r["shown"] else "",
                  "song": r["title"], "total": round(r["total"], 2)}
                 for r in full
             ],
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
     # --- Panel 2 and 3: retrieval and the prompt, for one chosen song --------
@@ -384,7 +583,9 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
         help="Pick any of the songs the recommender returned.",
     )
     song = next(s for s in songs if s["title"] == choice)
-    record = inspect_song(prefs, song, notes)
+    record = inspect_song(prefs, song, notes,
+                          scoring_config=scoring_config,
+                          retrieval_config=retrieval_config)
     board = record["retrieval"]
 
     st.subheader("Retrieval scoreboard")
@@ -410,7 +611,7 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
             }
             for row in top_rows
         ],
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
     st.caption(
         f"Confidence floor is {board['floor']:.2f}. Below it the system reports no "
@@ -473,7 +674,9 @@ def main() -> None:
                  "Compare lets you build two pipelines from the same taste profile and "
                  "see them side by side, to show what each change actually did. "
                  "Inspector opens the glass box: the score breakdown, the full "
-                 "retrieval scoreboard, and the exact prompt the model would receive.",
+                 "retrieval scoreboard, the exact prompt the model would receive, "
+                 "and editable scoring weights and retrieval knobs so you can see "
+                 "what each parameter is worth.",
         )
 
         with st.form("controls"):
@@ -514,7 +717,7 @@ def main() -> None:
 
             submitted = st.form_submit_button(
                 "Compare" if view == "Compare" else "Find songs",
-                use_container_width=True, type="primary")
+                width="stretch", type="primary")
 
     # --- Main content -----------------------------------------------------
     st.title("VibeFinder")

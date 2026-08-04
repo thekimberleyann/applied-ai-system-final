@@ -28,13 +28,25 @@ from __future__ import annotations
 import os
 import re
 
-# A note must clear this token-overlap confidence to count as a real match. Below
-# it, the caller should NOT feed the note to the LLM -- it is treated as "no
-# relevant note found" so the system falls back rather than grounding on a note
-# that does not actually describe this song. Tuned so a song's own note (which
-# shares its genre and mood words) clears it easily while an unrelated note does
-# not. Exposed as a module constant so a test can pin it.
-MIN_CONFIDENCE = 0.15
+from src.config import DEFAULT_RETRIEVAL, RetrievalConfig, retrieval_or_default
+
+# The retrieval knobs (the confidence floor, the stopword set, the exact-title
+# tiebreak and the metadata filter) now live in RetrievalConfig in src/config.py,
+# so they can be varied and MEASURED rather than only read. Every function below
+# takes an optional config and falls back to DEFAULT_RETRIEVAL.
+#
+# These two module-level names are kept as aliases onto the defaults. They are
+# not dead weight: the tests, src/glassbox.py and src/evaluate_retrieval.py all
+# import MIN_CONFIDENCE by name, and it reads far better in an assertion than
+# DEFAULT_RETRIEVAL.min_confidence does. Keeping the alias also means the config
+# refactor did not touch a single existing import.
+#
+# A note must clear MIN_CONFIDENCE to count as a real match. Below it, the caller
+# should NOT feed the note to the LLM -- it is treated as "no relevant note
+# found" so the system falls back rather than grounding on a note that does not
+# actually describe this song. Tuned so a song's own note (which shares its genre
+# and mood words) clears it easily while an unrelated note does not.
+MIN_CONFIDENCE = DEFAULT_RETRIEVAL.min_confidence
 
 # Path to the corpus, resolved relative to this file so it works no matter what
 # directory the program is launched from.
@@ -43,25 +55,29 @@ NOTES_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "song_notes.m
 # Very small stopword set. These words appear in almost every note ("a", "and",
 # "the") so counting them would make every note look similar to every query and
 # wash out the real signal (genre and mood words). Kept tiny on purpose.
-_STOPWORDS = {
-    "a", "an", "and", "the", "of", "to", "for", "it", "is", "at", "or", "on",
-    "in", "by", "with", "without", "so", "as", "not", "this", "that",
-}
+_STOPWORDS = DEFAULT_RETRIEVAL.stopwords
 
 
-def _tokenize(text: str) -> set[str]:
+def _tokenize(text: str, config: RetrievalConfig | None = None) -> set[str]:
     """Split text into a set of lowercased word tokens, stopwords removed.
 
     We return a SET (not a list) because the similarity below is overlap-based and
     only cares whether a word is present, not how many times. Non-letter/digit
     characters are treated as separators, so punctuation never sticks to a word.
+
+    Stopword removal is a retrieval-quality decision, not a formatting detail, so
+    it is a knob. config.active_stopwords() resolves the on/off flag and the word
+    set together and returns an EMPTY set when filtering is disabled, which keeps
+    this function down to a single code path: there is no `if filtering enabled`
+    branch here that could drift from the one the config already made.
     """
     if not text:
         return set()
+    stopwords = retrieval_or_default(config).active_stopwords()
     # \b word boundaries via findall of alphanumeric runs; lowercased for a
     # case-insensitive match against the (also lowercased) notes.
     words = re.findall(r"[a-z0-9]+", text.lower())
-    return {w for w in words if w not in _STOPWORDS}
+    return {w for w in words if w not in stopwords}
 
 
 def load_notes(path: str = NOTES_PATH) -> dict[str, str]:
@@ -143,7 +159,8 @@ def _similarity(query_tokens: set[str], note_tokens: set[str]) -> float:
     return len(shared) / len(query_tokens)
 
 
-def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float, str | None]:
+def retrieve_note(song: dict, notes: dict[str, str],
+                  config: RetrievalConfig | None = None) -> tuple[str | None, float, str | None]:
     """Retrieve the best-matching note for one song.
 
     Returns a 3-tuple `(note_text, confidence, matched_title)`:
@@ -153,12 +170,20 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
       * matched_title -- the title of the note that won, or None on no match
 
     Algorithm: tokenize a query built from the song, score every note in the
-    corpus by token overlap, and keep the highest. If the best score is below
-    MIN_CONFIDENCE (or the corpus is empty), we return (None, best_score, None) so
-    the caller treats it as "no relevant note" and falls back. Ties are broken by
-    the corpus's iteration order, which is deterministic for a normal dict.
+    corpus by token overlap, and keep the highest. If the best score is below the
+    confidence floor (or the corpus is empty), we return (None, best_score, None)
+    so the caller treats it as "no relevant note" and falls back. Ties are broken
+    by the corpus's iteration order, which is deterministic for a normal dict.
+
+    `config` is optional and defaults to DEFAULT_RETRIEVAL, so the two-argument
+    call every existing caller makes is unchanged. It controls four things, each
+    marked at the line where it is read below: the stopword set, the confidence
+    floor, whether the exact-title tiebreak applies, and whether the metadata
+    filter applies. The RETURN CONTRACT does not vary with any of them: this is
+    always a 3-tuple in the shape described above.
     """
-    query_tokens = _tokenize(_query_for_song(song))
+    cfg = retrieval_or_default(config)
+    query_tokens = _tokenize(_query_for_song(song), cfg)
     song_title = str(song.get("title", ""))
 
     best_title: str | None = None
@@ -174,8 +199,13 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     best_key = (0, 0.0)
 
     for title, note in notes.items():
-        body_overlap = _similarity(query_tokens, _tokenize(note))
-        exact = 1 if title == song_title else 0
+        body_overlap = _similarity(query_tokens, _tokenize(note, cfg))
+        # KNOB: the exact-title tiebreak. Pinning `exact` to 0 for every note
+        # collapses the two-part key to plain overlap order, which is what a
+        # pure lexical retriever would do. Expressed as a zeroed flag rather than
+        # as a second sort path so both settings run the identical loop and the
+        # only difference between them is the one value being measured.
+        exact = 1 if (cfg.use_exact_title_tiebreak and title == song_title) else 0
         key = (exact, body_overlap)
         if key > best_key:
             best_key = key
@@ -188,7 +218,8 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     # will fall back), but we still return the score we saw so it can be logged.
     # An off-catalog song has no exact-title match and typically low body overlap,
     # so it falls here to the guardrail path.
-    if best_note is None or best_conf < MIN_CONFIDENCE:
+    # KNOB: the confidence floor.
+    if best_note is None or best_conf < cfg.min_confidence:
         return (None, best_conf, None)
 
     # METADATA FILTER. Similarity finds candidates; IDENTITY decides eligibility.
@@ -219,7 +250,16 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     # previously produced a confident explanation built from a DIFFERENT song's
     # facts. Now that song falls back to a score-only reason, which is the
     # honest answer.
-    if best_title != song_title:
+    #
+    # KNOB, AND THE ONE KNOB THAT IS A FAULT INJECTION. cfg.use_metadata_filter
+    # defaults to True and should stay True in any real use. Setting it False
+    # does not "relax" this guardrail, it removes it, restoring the exact bug
+    # described above. It is configurable only so that failure can be
+    # demonstrated and MEASURED on demand (evaluate_retrieval's leave-one-out
+    # count goes from zero leaks to the whole catalog) instead of being taken on
+    # trust from this comment. Anything that exposes this to a user is required
+    # to label it as a deliberate break-it switch, not as a normal setting.
+    if cfg.use_metadata_filter and best_title != song_title:
         return (None, best_conf, None)
 
     return (best_note, best_conf, best_title)
@@ -241,7 +281,8 @@ def missing_notes(songs: list[dict], notes: dict[str, str]) -> list[str]:
     return [s["title"] for s in songs if s.get("title") not in notes]
 
 
-def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:
+def score_all_notes(song: dict, notes: dict[str, str],
+                    config: RetrievalConfig | None = None) -> list[dict]:
     """Score EVERY note against one song and return the whole ranked board.
 
     This is the observability twin of retrieve_note. retrieve_note answers "which
@@ -257,8 +298,17 @@ def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:
         overlap      -- token-overlap similarity, 0.0-1.0, rounded to 2dp, the
                         same number retrieve_note reports as `confidence`
         exact        -- True when the note's title equals the song's title, i.e.
-                        this note wins the exact-title tiebreak
-        above_floor  -- whether overlap clears MIN_CONFIDENCE
+                        this note wins the exact-title tiebreak. Reported as a
+                        FACT about the titles, not as a prediction: it stays True
+                        even when config.use_exact_title_tiebreak is off, because
+                        the Inspector's job there is to show that an exact match
+                        existed and was not acted on.
+        above_floor  -- whether overlap clears config.min_confidence
+
+    `config` is optional and defaults to DEFAULT_RETRIEVAL. It affects the
+    tokenization (via the stopword knob) and the above_floor column (via the
+    confidence floor), so a board rendered under a given config matches the
+    decision retrieve_note makes under that same config.
 
     Ordering is by OVERLAP alone, descending. That is deliberate and is the whole
     point of the display: sorting by overlap shows what a pure token-overlap
@@ -266,7 +316,8 @@ def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:
     different note the disagreement becomes visible instead of being silently
     resolved. Ties are broken by title so the order is stable across runs.
     """
-    query_tokens = _tokenize(_query_for_song(song))
+    cfg = retrieval_or_default(config)
+    query_tokens = _tokenize(_query_for_song(song), cfg)
     song_title = str(song.get("title", ""))
 
     board: list[dict] = []
@@ -274,12 +325,12 @@ def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:
         # Round ONCE and reuse, the same discipline score_song uses for its
         # energy term: computing the similarity twice invites the displayed
         # number and the floor comparison to disagree in the last decimal.
-        overlap = round(_similarity(query_tokens, _tokenize(note)), 2)
+        overlap = round(_similarity(query_tokens, _tokenize(note, cfg)), 2)
         board.append({
             "title": title,
             "overlap": overlap,
             "exact": title == song_title,
-            "above_floor": overlap >= MIN_CONFIDENCE,
+            "above_floor": overlap >= cfg.min_confidence,
         })
 
     # Negate the score for a descending sort while keeping the title ascending,
