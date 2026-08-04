@@ -199,15 +199,31 @@ def inspect_song(prefs: dict, song: dict, notes: dict[str, str],
         else None
     )
 
+    # There are TWO distinct reasons a prompt can be withheld, and conflating
+    # them would send a reader looking in the wrong place. Either nothing scored
+    # above the confidence floor (an alien query), or something scored well but
+    # was not this song's own note and the metadata filter rejected it (a corpus
+    # gap). The second case can show a high confidence number, so reporting it as
+    # a floor failure would be actively misleading.
+    if retrieval["grounded"]:
+        withheld = None
+    elif retrieval["board"] and retrieval["board"][0]["above_floor"]:
+        withheld = (
+            f"the best match was '{retrieval['board'][0]['title']}' at "
+            f"{retrieval['board'][0]['overlap']:.2f}, which is not this song's own "
+            "note, so the metadata filter rejected it and the score-only fallback runs"
+        )
+    else:
+        withheld = (
+            "nothing cleared the confidence floor, so the score-only fallback "
+            "runs and no prompt is built"
+        )
+
     return {
         "breakdown": breakdown,
         "retrieval": retrieval,
         "prompt": prompt,
-        "prompt_withheld_reason": (
-            None if retrieval["grounded"]
-            else "no note cleared the confidence floor, so the score-only "
-                 "fallback runs and no prompt is built"
-        ),
+        "prompt_withheld_reason": withheld,
     }
 
 
