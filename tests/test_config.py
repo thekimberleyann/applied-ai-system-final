@@ -27,6 +27,8 @@ THIRD, PIN THAT THE KNOBS ACTUALLY DO SOMETHING
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import os
 from dataclasses import FrozenInstanceError, replace
 
@@ -318,7 +320,7 @@ def test_the_tiebreak_knob_moves_hit_at_one():
     no_tiebreak = replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False)
 
     via_config = evaluate(songs, notes, config=no_tiebreak)
-    via_flag = evaluate(songs, notes, use_tiebreak=False)
+    via_flag = evaluate(songs, notes, replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False))
 
     assert via_config == via_flag
     assert via_config["hit@1"] < evaluate(songs, notes)["hit@1"]
@@ -374,8 +376,8 @@ def test_the_stopword_knob_moves_the_overlap_ranking():
     songs, notes = _catalog(), _notes()
     no_stopwords = replace(DEFAULT_RETRIEVAL, use_stopwords=False)
 
-    with_sw = evaluate(songs, notes, use_tiebreak=False)
-    without_sw = evaluate(songs, notes, use_tiebreak=False, config=no_stopwords)
+    with_sw = evaluate(songs, notes, replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False))
+    without_sw = evaluate(songs, notes, replace(no_stopwords, use_exact_title_tiebreak=False))
 
     assert without_sw["mrr"] < with_sw["mrr"]
     # The exact-title tiebreak is strong enough to hide this entirely, which is

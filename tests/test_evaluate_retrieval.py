@@ -9,6 +9,8 @@ silently lowering quality.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import os
 
 from src.evaluate_retrieval import (
@@ -18,6 +20,7 @@ from src.evaluate_retrieval import (
     leave_one_out,
     reciprocal_rank,
 )
+from src.config import DEFAULT_RETRIEVAL
 from src.recommender import load_songs
 from src.retriever import MIN_CONFIDENCE, load_notes, missing_notes, retrieve_note
 
@@ -84,7 +87,7 @@ def test_every_song_has_a_gold_note():
 def test_shipped_retriever_always_finds_the_right_note_first():
     """hit@1 of 1.0 is the contract the exact-title tiebreak exists to deliver."""
     songs, notes = _catalog(), _notes()
-    result = evaluate(songs, notes, use_tiebreak=True)
+    result = evaluate(songs, notes)
     assert result["hit@1"] == 1.0
     assert result["mrr"] == 1.0
 
@@ -97,8 +100,8 @@ def test_the_tiebreak_is_load_bearing_not_decoration():
     could then be reconsidered on evidence rather than removed on a hunch.
     """
     songs, notes = _catalog(), _notes()
-    shipped = evaluate(songs, notes, use_tiebreak=True)
-    overlap = evaluate(songs, notes, use_tiebreak=False)
+    shipped = evaluate(songs, notes)
+    overlap = evaluate(songs, notes, replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False))
 
     assert overlap["hit@1"] < shipped["hit@1"]
     assert overlap["mrr"] < shipped["mrr"]

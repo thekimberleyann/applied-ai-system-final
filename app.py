@@ -6,11 +6,16 @@ collects a taste profile from form controls, calls the existing functions, and
 renders the ranked songs with their grounded RAG explanations. The CLI
 (`python -m src.main`) remains the graded, reproducible path; this is optional polish.
 
-Two views:
-- Single  -- one configuration (the finished system).
-- Compare -- a "build your own model" A/B lab: the same taste profile run through two
+Three views:
+- Single    -- one configuration (the finished system).
+- Compare   -- a "build your own model" A/B lab: the same taste profile run through two
   independently-configured pipelines side by side (catalog size, RAG on/off, live vs
   offline, genre variety), to show what each change actually did.
+- Inspector -- the glass box: the score breakdown behind the ranking, the full
+  retrieval scoreboard with the confidence floor and any tiebreak override, the
+  assembled prompt, and editable knobs (scoring weights, floor, stopwords,
+  tiebreak) whose effects are measured by `python -m src.evaluate_retrieval
+  --compare`.
 
 Run it from the repo root:
 
@@ -457,7 +462,7 @@ def _knob_controls() -> tuple[ScoringConfig, RetrievalConfig]:
 
     st.divider()
     st.button("Reset to defaults", on_click=_reset_knobs,
-              use_container_width=True,
+              width="stretch",
               help="Restores the shipped configuration. These controls only ever "
                    "affect the current session; the defaults in src/config.py are "
                    "never written to.")
@@ -555,7 +560,7 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
             for r in rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     with st.expander(f"Show the full ranking (all {len(songs)} songs)"):
@@ -567,7 +572,7 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
                  "song": r["title"], "total": round(r["total"], 2)}
                 for r in full
             ],
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
         )
 
     # --- Panel 2 and 3: retrieval and the prompt, for one chosen song --------
@@ -606,7 +611,7 @@ def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
             }
             for row in top_rows
         ],
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
     st.caption(
         f"Confidence floor is {board['floor']:.2f}. Below it the system reports no "
@@ -712,7 +717,7 @@ def main() -> None:
 
             submitted = st.form_submit_button(
                 "Compare" if view == "Compare" else "Find songs",
-                use_container_width=True, type="primary")
+                width="stretch", type="primary")
 
     # --- Main content -----------------------------------------------------
     st.title("VibeFinder")

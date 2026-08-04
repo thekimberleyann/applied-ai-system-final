@@ -119,28 +119,21 @@ def reciprocal_rank(board: list[dict], gold_title: str) -> float:
 
 
 def evaluate(songs: list[dict], notes: dict[str, str],
-             use_tiebreak: bool = True,
              config: RetrievalConfig | None = None) -> dict:
     """Score retrieval over the derived gold set.
 
-    `use_tiebreak` selects what is being measured:
-      True  -- the shipped retriever, exact-title tiebreak included. This is the
-               system as it actually behaves.
-      False -- pure token overlap, the tiebreak removed. This is what the
-               retrieval would do on its own merits, and the gap between the two
-               is exactly how much work the tiebreak is doing.
+    `config` (optional, defaults to DEFAULT_RETRIEVAL) is the SINGLE source of
+    truth for every knob, including whether the exact-title tiebreak applies.
+    An earlier version also took a separate `use_tiebreak` argument and combined
+    the two with AND, which meant the same question had two answers and a reader
+    had to check both to know what was measured. To score pure token overlap,
+    pass a config with the tiebreak switched off:
 
-    score_all_notes orders by overlap alone, so the False case reads straight off
-    the board. The True case asks retrieve_note, which is the real decision-maker.
+        replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False)
 
-    `config` (optional, defaults to DEFAULT_RETRIEVAL) supplies the stopword and
-    floor knobs. The tiebreak is now expressible two ways, through this
-    function's original `use_tiebreak` argument and through
-    config.use_exact_title_tiebreak, so they are combined with AND: the tiebreak
-    applies only when BOTH say so. That keeps the older two-call idiom
-    (evaluate(songs, notes, use_tiebreak=False)) working exactly as it did while
-    letting the comparison table drive everything from a config alone. Read it as
-    "use_tiebreak asks for it, the config permits it".
+    That comparison is the interesting one: score_all_notes orders by overlap
+    alone, so a tiebreak-off config shows what retrieval does on its own merits,
+    and the gap against the default is how much work the tiebreak is doing.
     """
     cfg = retrieval_or_default(config)
     pairs = gold_pairs(songs, notes)
@@ -150,7 +143,7 @@ def evaluate(songs: list[dict], notes: dict[str, str],
     for song, gold in pairs:
         board = score_all_notes(song, notes, cfg)
 
-        if use_tiebreak and cfg.use_exact_title_tiebreak:
+        if cfg.use_exact_title_tiebreak:
             # Re-rank the board the way retrieve_note actually decides: an exact
             # title match wins outright, otherwise overlap order stands. This
             # mirrors retrieve_note's (exact, overlap) sort key rather than
@@ -269,14 +262,14 @@ def metrics_for_config(songs: list[dict], notes: dict[str, str],
     two different things in two different columns: every row of that table is one
     call to this, with only the config changing.
     """
-    scores = evaluate(songs, notes, use_tiebreak=True, config=config)
+    scores = evaluate(songs, notes, config)
     # The same gold set scored with the tiebreak suppressed, which exposes the
     # quality of the token overlap ITSELF. Without this column a knob that
     # degrades the similarity metric can hide completely, because the exact-title
     # tiebreak is strong enough to rescue a badly ranked board and hand back a
     # perfect hit@1 either way. The stopword knob is exactly that case on this
     # corpus, so the column is not hypothetical.
-    raw = evaluate(songs, notes, use_tiebreak=False, config=config)
+    raw = evaluate(songs, notes, replace(config, use_exact_title_tiebreak=False))
     return {
         "hit@1": scores["hit@1"],
         "hit@3": scores["hit@3"],
@@ -425,8 +418,9 @@ def main() -> None:
     print(f"gold set: {len(gold_pairs(songs, notes))} derived query/answer pairs")
     print("=" * 72)
 
-    shipped = evaluate(songs, notes, use_tiebreak=True)
-    overlap = evaluate(songs, notes, use_tiebreak=False)
+    shipped = evaluate(songs, notes)
+    overlap = evaluate(songs, notes,
+                       replace(DEFAULT_RETRIEVAL, use_exact_title_tiebreak=False))
 
     print(f"\n{'variant':<28}{'hit@1':>8}{'hit@3':>8}{'MRR':>8}")
     print(f"{'shipped (with tiebreak)':<28}{shipped['hit@1']:>8.3f}"
