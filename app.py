@@ -19,7 +19,7 @@ Run it from the repo root:
 
 Performance: defaults to the OFFLINE deterministic explainer, so first load is instant
 (no network, no google-genai import). Turn on live phrasing to use Gemini (needs
-GEMINI_API_KEY; one API call per song, subject to rate limits). Results are cached
+GEMINI_API_KEY; one batched API call per run, subject to rate limits). Results are cached
 per (profile, options) so repeats are instant.
 """
 

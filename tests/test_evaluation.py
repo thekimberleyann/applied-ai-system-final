@@ -84,7 +84,7 @@ def test_conflicted_profile_still_ranks_categorical_match_first(songs):
 
 def test_popularity_never_dethrones_the_categorical_number_one(songs):
     """Even at the aggressive weight 2.0, the perfect genre+mood match stays #1
-    (the ~2-point categorical moat). This is what keeps the demo honest."""
+    (the 1.06-point categorical moat on this catalog). This is what keeps the demo honest."""
     for weight in (1.0, 2.0):
         top = rank_with_popularity(FOLK_PROFILE, songs, weight, k=1)
         assert top[0][0]["title"] == "Wandering Roads"
