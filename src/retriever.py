@@ -191,3 +191,50 @@ def retrieve_note(song: dict, notes: dict[str, str]) -> tuple[str | None, float,
     if best_note is None or best_conf < MIN_CONFIDENCE:
         return (None, best_conf, None)
     return (best_note, best_conf, best_title)
+
+
+def score_all_notes(song: dict, notes: dict[str, str]) -> list[dict]:
+    """Score EVERY note against one song and return the whole ranked board.
+
+    This is the observability twin of retrieve_note. retrieve_note answers "which
+    note won"; this answers "what did the competition look like", which is what
+    the glass-box Inspector displays. It is deliberately ADDITIVE: retrieve_note
+    is untouched by this function and remains the single decision-maker, so the
+    tests and documented claims resting on it cannot be disturbed by anything
+    here. A test pins the two against each other so this board can never
+    disagree with the pick the system actually made.
+
+    Each entry is a dict with:
+        title        -- the note's title
+        overlap      -- token-overlap similarity, 0.0-1.0, rounded to 2dp, the
+                        same number retrieve_note reports as `confidence`
+        exact        -- True when the note's title equals the song's title, i.e.
+                        this note wins the exact-title tiebreak
+        above_floor  -- whether overlap clears MIN_CONFIDENCE
+
+    Ordering is by OVERLAP alone, descending. That is deliberate and is the whole
+    point of the display: sorting by overlap shows what a pure token-overlap
+    retriever would have returned, so when the exact-title tiebreak picks a
+    different note the disagreement becomes visible instead of being silently
+    resolved. Ties are broken by title so the order is stable across runs.
+    """
+    query_tokens = _tokenize(_query_for_song(song))
+    song_title = str(song.get("title", ""))
+
+    board: list[dict] = []
+    for title, note in notes.items():
+        # Round ONCE and reuse, the same discipline score_song uses for its
+        # energy term: computing the similarity twice invites the displayed
+        # number and the floor comparison to disagree in the last decimal.
+        overlap = round(_similarity(query_tokens, _tokenize(note)), 2)
+        board.append({
+            "title": title,
+            "overlap": overlap,
+            "exact": title == song_title,
+            "above_floor": overlap >= MIN_CONFIDENCE,
+        })
+
+    # Negate the score for a descending sort while keeping the title ascending,
+    # which gives a deterministic total order without two separate sort passes.
+    board.sort(key=lambda row: (-row["overlap"], row["title"]))
+    return board

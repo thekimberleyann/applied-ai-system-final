@@ -30,6 +30,7 @@ import os
 import streamlit as st
 
 from src.diversity import diversify
+from src.glassbox import inspect_song, rank_table
 from src.llm_client import VibeExplainer
 from src.main import _load_dotenv_if_present
 from src.recommender import load_songs, recommend_songs
@@ -300,6 +301,142 @@ code {
 """
 
 
+def _render_inspector(genre: str, mood: str, energy: float, k: int) -> None:
+    """The glass box: show the work behind one run.
+
+    Three panels answering three separate questions, deliberately kept apart
+    because conflating them is the confusion VibeFinder's guardrail exists to
+    prevent:
+
+      1. Why did this song RANK here? The deterministic recipe, no AI involved.
+      2. Why was THIS NOTE retrieved? The retrieval half of RAG.
+      3. What exactly would the model be handed? The assembled prompt.
+
+    All numbers come from src/glassbox.py, which reads the same functions the
+    real run uses. Nothing is recomputed here, so this view cannot disagree with
+    the system it describes.
+    """
+    prefs = {"favorite_genre": genre, "favorite_mood": mood, "target_energy": energy}
+    songs = _load_catalog("Expanded (46)")
+    notes = _load_corpus()
+
+    # --- Panel 1: the ranking ------------------------------------------------
+    st.subheader("Why this order")
+    st.caption(
+        "No AI here. This is the deterministic recipe, and it alone decides the "
+        "ranking. The rows below the cut are the near misses, which is where the "
+        "recipe is easiest to understand: they show what the shown songs beat."
+    )
+
+    rows = rank_table(prefs, songs, k=k)
+    st.dataframe(
+        [
+            {
+                "#": r["rank"],
+                "shown": "yes" if r["shown"] else "",
+                "song": r["title"],
+                "genre": r["genre"],
+                "mood": r["mood"],
+                "total": round(r["total"], 2),
+                "+genre": r["terms"]["genre"],
+                "+mood": r["terms"]["mood"],
+                "+energy": r["terms"]["energy"],
+            }
+            for r in rows
+        ],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    with st.expander(f"Show the full ranking (all {len(songs)} songs)"):
+        full = rank_table(prefs, songs, k=k, limit=len(songs))
+        st.dataframe(
+            [
+                {"#": r["rank"], "shown": "yes" if r["shown"] else "",
+                 "song": r["title"], "total": round(r["total"], 2)}
+                for r in full
+            ],
+            hide_index=True, use_container_width=True,
+        )
+
+    # --- Panel 2 and 3: retrieval and the prompt, for one chosen song --------
+    st.divider()
+    shown_titles = [r["title"] for r in rows if r["shown"]]
+    choice = st.selectbox(
+        "Inspect the retrieval for", shown_titles,
+        help="Pick any of the songs the recommender returned.",
+    )
+    song = next(s for s in songs if s["title"] == choice)
+    record = inspect_song(prefs, song, notes)
+    board = record["retrieval"]
+
+    st.subheader("Retrieval scoreboard")
+    st.caption(
+        "\"Print the retrieved chunks.\" This is the first step in debugging any "
+        "RAG system, and until now VibeFinder only wrote it to a log. Every note "
+        "in the corpus is scored against this song; the winner grounds the "
+        "explanation."
+    )
+
+    # Ordered by overlap alone, which is what a pure token-overlap retriever
+    # would have returned. Showing that ordering (rather than the tiebreak-
+    # adjusted one) is what makes a disagreement between the two visible.
+    top_rows = board["board"][:10]
+    st.dataframe(
+        [
+            {
+                "note": row["title"],
+                "overlap": row["overlap"],
+                "exact title": "yes" if row["exact"] else "",
+                "picked": "PICKED" if row["title"] == board["picked_title"] else "",
+                "above floor": "yes" if row["above_floor"] else "no",
+            }
+            for row in top_rows
+        ],
+        hide_index=True, use_container_width=True,
+    )
+    st.caption(
+        f"Confidence floor is {board['floor']:.2f}. Below it the system reports no "
+        "usable note and falls back to a score-only explanation rather than letting "
+        "the model invent facts."
+    )
+
+    if not board["grounded"]:
+        st.warning(
+            "Nothing cleared the floor, so the score-only fallback ran. That is the "
+            "guardrail: no facts means no grounded claim."
+        )
+    elif board["strict_override"]:
+        st.error(
+            f"Token overlap alone would have retrieved **{board['overlap_winner']}** at "
+            f"{board['board'][0]['overlap']:.2f}, beating this song's own note at "
+            f"{board['confidence']:.2f}. The exact-title tiebreak overrode it. That "
+            "tiebreak is a hand-rolled reranker, and this is a genuine case of "
+            "keyword retrieval fetching the wrong document."
+        )
+    elif board["tiebreak_overrode"]:
+        st.info(
+            f"Tied with **{board['overlap_winner']}** on overlap; the exact-title "
+            "tiebreak chose this song's own note. A tie, not a mis-retrieval."
+        )
+
+    st.subheader("The prompt that would be sent")
+    st.caption(
+        "\"RAG is automated paste.\" Retrieval's whole job is to put the right text "
+        "into the prompt for you, on every call. Building this string needs no API "
+        "key, so it is shown in offline mode too."
+    )
+    if record["prompt"] is None:
+        st.warning(f"No prompt built: {record['prompt_withheld_reason']}.")
+    else:
+        st.code(record["prompt"], language="text")
+        st.caption(
+            "The note above is the ONLY song fact the model receives. The match "
+            "reasons are passed in as already decided, which is how the ranking "
+            "stays authoritative and the model is left to phrase, not to judge."
+        )
+
+
 def main() -> None:
     st.set_page_config(page_title="VibeFinder", layout="wide")
     st.markdown(_PORTFOLIO_CSS, unsafe_allow_html=True)
@@ -314,10 +451,12 @@ def main() -> None:
     with st.sidebar:
         st.header("VibeFinder")
         view = st.radio(
-            "View", ["Single", "Compare"], horizontal=True,
+            "View", ["Single", "Compare", "Inspector"], horizontal=True,
             help="Single runs the finished system (recommender + RAG explanations). "
                  "Compare lets you build two pipelines from the same taste profile and "
-                 "see them side by side, to show what each change actually did.",
+                 "see them side by side, to show what each change actually did. "
+                 "Inspector opens the glass box: the score breakdown, the full "
+                 "retrieval scoreboard, and the exact prompt the model would receive.",
         )
 
         with st.form("controls"):
@@ -330,7 +469,7 @@ def main() -> None:
                                help="0.0 = very calm, 1.0 = very energetic")
             k = st.slider("How many songs", 1, 10, 5)
 
-            if view == "Single":
+            if view in ("Single", "Inspector"):
                 st.divider()
                 # Single view has no RAG toggle: it always runs the finished
                 # system with explanations on. Turning RAG off is a Compare-view
@@ -398,6 +537,10 @@ def main() -> None:
     st.subheader(f"{genre} / {mood} / energy {energy:.2f}")
     if view == "Compare":
         st.caption("Same taste profile, two pipelines. Configure each side in the sidebar.")
+
+    if view == "Inspector":
+        _render_inspector(genre, mood, energy, k)
+        return
 
     if view == "Single":
         with st.spinner("Finding your vibe..."):

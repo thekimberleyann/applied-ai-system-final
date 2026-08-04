@@ -1,6 +1,10 @@
 __pycache__/
 .venv/
 .venv_new/
+# Native-Windows venv. The repo lives on C:, so running it with Windows Python
+# avoids WSL's 9P filesystem translation entirely, which is the single biggest
+# speed factor for launching Streamlit here.
+.venv-win/
 .pytest_cache/
 .DS_Store
 
